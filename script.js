@@ -1,262 +1,331 @@
 /* Hmong First Baptist Church – Praise & Worship
-   Single-page site with portfolio-style Projects section.
-   Loads weekly Excel setlists + announcements directly from GitHub.
-   Excel conventions:
-     - Weekly setlist file: setlists/YYYY-MM-DD.xlsx
-       Sheet 1 (any name) columns suggestion: Song | Key | Notes | Link | CCLI | YouTube (optional)
-       Optional sheet "Meta" with rows: Field | Value (e.g., "YouTube" | <url>)
-       Optional sheet "Team" with columns: Role | Members
-     - Announcements file: announcements/announcements.xlsx (first row headers; include Date | Title | Details)
+   Static site (no backend) powered by Excel files on GitHub.
+
+   Sources it will read automatically each week:
+     • /setlist/setlist.xlsx           (preferred "This Coming Week" if present)
+     • /setlists/YYYY-MM-DD.xlsx       (archive and fallback for Next/Last)
+     • /announcements/announcements.xlsx
+
+   Weekly Excel conventions:
+     - First sheet (any name) rows = songs. Suggested headers:
+         Song | Key | Notes | Link | CCLI | Sermon | YouTube
+     - Optional sheet "Meta" with rows:
+         Field | Value   e.g.,  Sermon | <text>    YouTube | <url>   Date | 2025-10-05
+     - Optional sheet "Team" (not displayed here, but supported if you want to extend):
+         Role | Members
+
+   Announcements Excel:
+     - announcements.xlsx with headers like: Date | Title | Details
 */
 
-// >>> EDIT THIS with your repo details <<<
+// >>>>>> EDIT REPO INFO <<<<<
 const GH = {
-  owner: "YSayaovong",            // GitHub username/org
-  repo:  "hfb-pw-site",           // repository name
+  owner: "YSayaovong",
+  repo:  "HFBC_Praise_Worship",
   branch:"main"
 };
+
 const PATHS = {
-  setlists: "setlists",
-  ann:      "announcements/announcements.xlsx"
+  specialCurrent: "setlist/setlist.xlsx",          // optional, used for "This Coming Week"
+  setlistsDir:    "setlists",                      // dated archive files
+  announcements:  "announcements/announcements.xlsx"
 };
 
 // ---------- helpers ----------
 const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
 const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
-const $ = (sel) => document.querySelector(sel);
+const $ = (s) => document.querySelector(s);
 
+async function existsOnGitHub(path){
+  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
+  return r.ok;
+}
 async function listDir(path){
-  const res = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
-  if(!res.ok) return [];
-  return res.json();
+  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
+  if(!r.ok) return [];
+  return r.json();
 }
 async function fetchWB(path){
-  const res = await fetch(rawURL(path));
-  if(!res.ok) throw new Error(`Fetch error: ${res.status} ${res.statusText}`);
-  const ab = await res.arrayBuffer();
-  return XLSX.read(ab, { type:"array" });
+  const r = await fetch(rawURL(path));
+  if(!r.ok) throw new Error(`Fetch error ${r.status} for ${path}`);
+  const ab = await r.arrayBuffer();
+  return XLSX.read(ab, { type: "array" });
 }
 function firstSheetAOA(wb){
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { header:1, defval:"" });
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sh, { header:1, defval:"" });
 }
-function toNiceDateFromName(name){
-  const m = name.match(/^(\d{4})-(\d{2})-(\d{2})\.xlsx$/);
-  if(!m) return name;
-  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+function toDateFromName(name){ // 2025-10-05.xlsx
+  const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
+  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
+}
+function niceDate(d){
   return d.toLocaleDateString(undefined,{ weekday:"long", year:"numeric", month:"long", day:"numeric" });
 }
-function sortSetlistNamesDesc(files){
-  return files.sort((a,b)=> b.localeCompare(a)); // YYYY-MM-DD.xlsx
+function extractYouTubeId(url){
+  try{
+    if(!url) return "";
+    if(url.includes("watch?v=")) return new URL(url).searchParams.get("v") || "";
+    if(url.includes("youtu.be/")) return url.split("youtu.be/")[1].split(/[?&#]/)[0];
+    if(url.includes("/embed/")) return url.split("/embed/")[1].split(/[?&#]/)[0];
+    return "";
+  }catch{ return ""; }
 }
-function renderTable(aoa, targetSel, caption){
-  const target = $(targetSel);
-  if(!target) return;
-  if(!aoa || aoa.length===0){ target.textContent = "No data."; return; }
-  let html = caption ? `<p class="dim">${caption}</p>` : "";
-  html += "<table>";
+function renderTable(aoa, targetSel){
+  const el = $(targetSel);
+  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
+  let html = "<table>";
   aoa.forEach((row,i)=>{
     html += "<tr>";
-    row.forEach(cell=>{
-      const safe = String(cell);
-      html += i===0 ? `<th>${safe}</th>` : `<td>${safe}</td>`;
-    });
+    row.forEach(cell => { html += (i===0? "<th>":"<td>") + String(cell) + (i===0? "</th>":"</td>"); });
     html += "</tr>";
   });
   html += "</table>";
-  target.innerHTML = html;
+  el.innerHTML = html;
 }
-function embedYouTube(url){
-  const host = $("#youtube-video");
-  host.innerHTML = "";
-  if(!url) { host.textContent = "No video for this week."; return; }
-  // Extract id for common formats
-  let id = "";
-  try{
-    if(url.includes("youtube.com/watch?v=")) id = new URL(url).searchParams.get("v");
-    else if(url.includes("youtu.be/")) id = url.split("youtu.be/")[1].split(/[?&#]/)[0];
-    else if(url.includes("/embed/")) id = url.split("/embed/")[1].split(/[?&#]/)[0];
-  }catch(_){}
-  if(!id){ host.textContent = "Invalid YouTube URL."; return; }
-  host.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}" allowfullscreen></iframe>`;
+function renderSermon(targetSel, sermon){
+  const el = $(targetSel);
+  el.textContent = sermon ? `Sermon: ${sermon}` : "";
+}
+function renderYouTube(targetSel, url){
+  const el = $(targetSel);
+  el.innerHTML = "";
+  const id = extractYouTubeId(url);
+  if(!id){ el.textContent = "No video for this week."; return; }
+  el.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}" allowfullscreen></iframe>`;
 }
 
-// ---------- main sections ----------
-async function loadLatestSetlist(){
-  const items = await listDir(PATHS.setlists);
-  const files = items.filter(i=>i.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(i.name)).map(i=>i.name);
-  if(files.length===0){
-    $("#next-date").textContent = "No setlists found.";
-    $("#next-setlist").textContent = "Upload a file like setlists/2025-10-05.xlsx";
-    return [];
-  }
-  sortSetlistNamesDesc(files);
-  const latest = files[0];
-  $("#next-date").textContent = toNiceDateFromName(latest);
+// Extract Sermon/YouTube/Date from Meta or columns
+function parseMeta(wb, aoa){
+  let sermon="", youtube="", serviceDate=null;
 
-  const wb = await fetchWB(`${PATHS.setlists}/${latest}`);
-  const aoa = firstSheetAOA(wb);
-  renderTable(aoa, "#next-setlist");
-
-  // YouTube: Meta sheet or YouTube column on first sheet
-  let yt = "";
   if(wb.Sheets["Meta"]){
     const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
-    const row = rows.find(r => (r[0]||"").toString().toLowerCase()==="youtube");
-    yt = row ? row[1] : "";
+    for(const r of rows){
+      const k = String(r[0]||"").toLowerCase();
+      const v = r[1] || "";
+      if(k==="sermon")  sermon = v || sermon;
+      if(k==="youtube") youtube = v || youtube;
+      if(k==="date" || k==="servicedate" || k==="service date"){
+        const d = new Date(v);
+        if(!isNaN(d)) serviceDate = d;
+      }
+    }
   }
-  if(!yt && aoa[0]){
-    const col = aoa[0].findIndex(h=> (h||"").toString().toLowerCase()==="youtube");
-    if(col>=0) yt = aoa[1]?.[col] || "";
+  if(aoa && aoa[0]){
+    const hdr = aoa[0].map(h=>String(h).toLowerCase());
+    const sIdx = hdr.indexOf("sermon");
+    const yIdx = hdr.indexOf("youtube");
+    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date") : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
+    if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
+    if(!youtube && yIdx>=0) youtube = aoa[1]?.[yIdx] || "";
+    if(!serviceDate && dIdx>=0){
+      const d = new Date(aoa[1]?.[dIdx]);
+      if(!isNaN(d)) serviceDate = d;
+    }
   }
-  embedYouTube(yt);
-
-  // Team (optional)
-  if(wb.Sheets["Team"]){
-    const t = XLSX.utils.sheet_to_json(wb.Sheets["Team"], { header:1, defval:"" });
-    const body = t.slice(1).filter(r=>r[0]||r[1]).map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("");
-    $("#team-list").innerHTML = `<table><tr><th>Role</th><th>Members</th></tr>${body}</table>`;
-  }else{
-    $("#team-list").innerHTML = `<p class="dim">Add a "Team" sheet (Role | Members) in the weekly Excel to display roster.</p>`;
-  }
-
-  return files; // for archive & library
+  return { sermon, youtube, serviceDate };
 }
 
-async function loadArchive(files){
-  if(!files || files.length===0){
-    $("#archive-list").textContent = "No archive yet.";
-    return;
-  }
-  const html = files.map(f=>{
-    const nice = toNiceDateFromName(f);
-    return `<div><a href="#" data-file="${f}" class="archive-link">${nice}</a> <span class="dim">(${f})</span></div>`;
-  }).join("");
-  $("#archive-list").innerHTML = html;
-
-  // click handlers: load selected setlist into Next section (and scroll)
-  $("#archive-list").querySelectorAll(".archive-link").forEach(a=>{
-    a.addEventListener("click", async (e)=>{
-      e.preventDefault();
-      const file = a.getAttribute("data-file");
-      const wb = await fetchWB(`${PATHS.setlists}/${file}`);
-      const aoa = firstSheetAOA(wb);
-      $("#next-date").textContent = toNiceDateFromName(file);
-      renderTable(aoa, "#next-setlist");
-
-      // YouTube again for selected
-      let yt = "";
-      if(wb.Sheets["Meta"]){
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
-        const row = rows.find(r => (r[0]||"").toString().toLowerCase()==="youtube");
-        yt = row ? row[1] : "";
-      }
-      if(!yt && aoa[0]){
-        const col = aoa[0].findIndex(h=> (h||"").toString().toLowerCase()==="youtube");
-        if(col>=0) yt = aoa[1]?.[col] || "";
-      }
-      embedYouTube(yt);
-
-      // Team for selected
-      if(wb.Sheets["Team"]){
-        const t = XLSX.utils.sheet_to_json(wb.Sheets["Team"], { header:1, defval:"" });
-        const body = t.slice(1).filter(r=>r[0]||r[1]).map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("");
-        $("#team-list").innerHTML = `<table><tr><th>Role</th><th>Members</th></tr>${body}</table>`;
-      }else{
-        $("#team-list").innerHTML = `<p class="dim">No "Team" sheet in this file.</p>`;
-      }
-
-      // Scroll up to the Next section
-      document.querySelector("#next").scrollIntoView({ behavior:"smooth" });
-    });
-  });
-}
-
+// ---------- Announcements ----------
 async function loadAnnouncements(){
   try{
-    const wb = await fetchWB(PATHS.ann);
+    const wb = await fetchWB(PATHS.announcements);
     const aoa = firstSheetAOA(wb);
-    // Try to sort rows (after header) by Date desc if first column parses
     if(aoa.length>1){
       const header = aoa[0];
-      const rows = aoa.slice(1).filter(r=> r.some(c=>String(c).trim()!==""));
-      rows.sort((a,b)=> new Date(b[0]) - new Date(a[0]));
+      const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
+      rows.sort((a,b)=> new Date(b[0]) - new Date(a[0])); // sort by Date desc if present
       renderTable([header, ...rows], "#announcements-table");
     }else{
       renderTable(aoa, "#announcements-table");
     }
   }catch(e){
-    $("#announcements-table").innerHTML = `<p class="dim">Add <code>announcements/announcements.xlsx</code> with columns like: Date | Title | Details.</p>`;
+    $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Title | Details.</p>`;
   }
 }
 
-async function buildSongLibrary(files){
-  try{
-    if(!files || files.length===0){
-      $("#library-table").innerHTML = `<p class="dim">No setlists yet.</p>`;
-      return;
-    }
-    const map = new Map(); // title -> { key, ccli, link }
-    for(const f of files){
-      const wb = await fetchWB(`${PATHS.setlists}/${f}`);
+// ---------- Setlists (Next & Last) ----------
+async function getDatedFiles(){
+  const items = await listDir(PATHS.setlistsDir);
+  return items
+    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
+    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
+    .sort((a,b)=> a.date - b.date); // oldest -> newest
+}
+
+async function loadSetlists(){
+  const dated = await getDatedFiles();
+  const specialExists = await existsOnGitHub(PATHS.specialCurrent);
+
+  // Load special (preferred for "This Coming Week")
+  let nextRendered = false;
+  let specialMeta = null;
+
+  if(specialExists){
+    try{
+      const wb = await fetchWB(PATHS.specialCurrent);
       const aoa = firstSheetAOA(wb);
-      if(!aoa || aoa.length===0) continue;
-      const headers = aoa[0].map(h => String(h).toLowerCase());
-      const ti = headers.indexOf("song")>-1 ? headers.indexOf("song") : headers.indexOf("title");
-      const ki = headers.indexOf("key");
-      const ci = headers.indexOf("ccli");
-      const li = headers.indexOf("link");
-      for(const row of aoa.slice(1)){
-        const title = (row[ti]||"").toString().trim();
-        if(!title) continue;
-        if(!map.has(title)){
-          map.set(title, {
-            key: (ki>=0 ? row[ki] : "") || "",
-            ccli: (ci>=0 ? row[ci] : "") || "",
-            link: (li>=0 ? row[li] : "") || ""
-          });
-        }
+      const { sermon, youtube, serviceDate } = parseMeta(wb, aoa);
+
+      $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : "This Week";
+      renderTable(aoa, "#next-setlist");
+      renderSermon("#next-sermon", sermon);
+      renderYouTube("#youtube-video", youtube);
+      nextRendered = true;
+
+      // Choose "Last Week" based on special date if available; else use latest dated file
+      let last = null;
+      if(serviceDate){
+        const before = dated.filter(f => f.date < serviceDate);
+        last = before[before.length - 1] || null;
+      }else{
+        last = dated[dated.length - 1] || null;
       }
+
+      if(last){
+        $("#last-date").textContent = niceDate(last.date);
+        const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
+        const aoa2 = firstSheetAOA(wb2);
+        renderTable(aoa2, "#last-setlist");
+        const meta2 = parseMeta(wb2, aoa2);
+        renderSermon("#last-sermon", meta2.sermon);
+      }else{
+        $("#last-date").textContent = "—";
+        $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
+      }
+
+      specialMeta = { wb, aoa, serviceDate };
+    }catch(e){
+      // If special fails, fall back to dated logic
+      nextRendered = false;
     }
-    const header = ["Song","Key","CCLI","Ref"];
-    const rows = Array.from(map.entries()).sort((a,b)=> a[0].localeCompare(b[0])).map(([t,meta])=>[
-      t, meta.key, meta.ccli, meta.link
-    ]);
-    // Render
-    let html = "<table><tr>";
-    header.forEach(h=> html += `<th>${h}</th>`);
-    html += "</tr>";
-    rows.forEach(r=>{
-      html += "<tr>";
-      html += `<td>${r[0]}</td>`;
-      html += `<td>${r[1]||""}</td>`;
-      html += `<td>${r[2]||""}</td>`;
-      html += `<td>${r[3] ? `<a href="${r[3]}" target="_blank" rel="noopener">Link</a>` : ""}</td>`;
-      html += "</tr>";
-    });
-    html += "</table>";
-    $("#library-table").innerHTML = html || `<p class="dim">No songs found in setlists.</p>`;
-  }catch(e){
-    $("#library-table").innerHTML = `<p class="dim">Unable to build library.</p>`;
   }
+
+  if(!nextRendered){
+    // Use dated files to determine next / last by today
+    if(dated.length===0){
+      $("#next-date").textContent = "No setlists yet.";
+      $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
+      $("#last-date").textContent = "—";
+      $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
+      $("#youtube-video").textContent = "No video for this week.";
+      return { dated, specialMeta };
+    }
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    let nextIdx = dated.findIndex(f => f.date >= today);
+    if(nextIdx === -1) nextIdx = dated.length - 1;
+
+    const next = dated[nextIdx];
+    const wb = await fetchWB(`${PATHS.setlistsDir}/${next.name}`);
+    const aoa = firstSheetAOA(wb);
+    renderTable(aoa, "#next-setlist");
+    $("#next-date").textContent = niceDate(next.date);
+    const meta = parseMeta(wb, aoa);
+    renderSermon("#next-sermon", meta.sermon);
+    renderYouTube("#youtube-video", meta.youtube);
+
+    const last = dated[nextIdx - 1] || dated[dated.length - 2] || null;
+    if(last){
+      $("#last-date").textContent = niceDate(last.date);
+      const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
+      const aoa2 = firstSheetAOA(wb2);
+      renderTable(aoa2, "#last-setlist");
+      const meta2 = parseMeta(wb2, aoa2);
+      renderSermon("#last-sermon", meta2.sermon);
+    }else{
+      $("#last-date").textContent = "—";
+      $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
+    }
+  }
+
+  return { dated, specialMeta };
 }
 
-// ---------- init ----------
+// ---------- Analytics (Top/Bottom & Library) ----------
+async function buildAnalytics(dated, specialMeta){
+  // If there are no dated files, optionally include the special current for analytics
+  const useSpecialOnly = dated.length === 0 && specialMeta;
+
+  if(dated.length===0 && !useSpecialOnly){
+    $("#top5").innerHTML = `<li class="dim">No data yet.</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data yet.</li>`;
+    $("#library-table").innerHTML = `<p class="dim">No setlists found.</p>`;
+    return;
+  }
+
+  const songCounts = new Map();  // title -> plays
+  const songKeys   = new Map();  // title -> Set(keys)
+
+  async function accumulateFromWB(wb){
+    const aoa = firstSheetAOA(wb);
+    if(!aoa || aoa.length===0) return;
+    const headers = aoa[0].map(h => String(h).toLowerCase());
+    const ti = headers.indexOf("song") !== -1 ? headers.indexOf("song") : headers.indexOf("title");
+    const ki = headers.indexOf("key");
+    if(ti === -1) return;
+
+    for(const row of aoa.slice(1)){
+      const title = (row[ti] || "").toString().trim();
+      if(!title) continue;
+      const key = ki>=0 ? (row[ki] || "").toString().trim() : "";
+
+      songCounts.set(title, (songCounts.get(title)||0) + 1);
+      if(!songKeys.has(title)) songKeys.set(title, new Set());
+      if(key) songKeys.get(title).add(key);
+    }
+  }
+
+  if(useSpecialOnly){
+    await accumulateFromWB(specialMeta.wb);
+  }else{
+    for(const f of dated){
+      const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
+      await accumulateFromWB(wb);
+    }
+  }
+
+  const entries = Array.from(songCounts.entries()); // [title, count]
+  entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+
+  const top5 = entries.slice(0,5);
+  $("#top5").innerHTML = top5.length
+    ? top5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("")
+    : `<li class="dim">No data yet.</li>`;
+
+  const bottom5 = entries.slice().sort((a,b)=> a[1]-b[1] || a[0].localeCompare(b[0])).slice(0,5);
+  $("#bottom5").innerHTML = bottom5.length
+    ? bottom5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("")
+    : `<li class="dim">No data yet.</li>`;
+
+  const header = ["Song","Keys Used","Plays"];
+  let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
+  const allTitles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
+  for(const t of allTitles){
+    const keysUsed = songKeys.get(t) ? Array.from(songKeys.get(t)).sort().join(", ") : "";
+    const plays = songCounts.get(t) || 0;
+    html += `<tr><td>${t}</td><td>${keysUsed}</td><td>${plays}</td></tr>`;
+  }
+  html += "</table>";
+  $("#library-table").innerHTML = html;
+}
+
+// ---------- boot ----------
 document.addEventListener("DOMContentLoaded", async ()=>{
-  // Starter fallbacks appear until files are added
   try{
-    const files = await loadLatestSetlist();   // sets Next Service + YouTube + Team (if “Team” sheet)
-    await loadArchive(files);                  // clickable archive
-    await loadAnnouncements();                 // announcements table
-    await buildSongLibrary(files);             // derived library
+    await loadAnnouncements();
+    const { dated, specialMeta } = await loadSetlists();
+    await buildAnalytics(dated, specialMeta);
   }catch(e){
     console.error(e);
-    // Friendly starters
-    $("#next-date").textContent = "Add your first weekly Excel";
-    $("#next-setlist").innerHTML = `<p class="dim">Place <code>setlists/YYYY-MM-DD.xlsx</code> (first sheet = songs). Optional sheet <code>Meta</code> → <code>YouTube</code> for embedded video.</p>`;
-    $("#archive-list").innerHTML = `<p class="dim">Archive appears after at least one weekly file is added.</p>`;
-    $("#announcements-table").innerHTML = `<p class="dim">Add <code>announcements/announcements.xlsx</code> with columns e.g. Date | Title | Details.</p>`;
-    $("#library-table").innerHTML = `<p class="dim">Library builds after weekly files exist.</p>`;
-    $("#team-list").innerHTML = `<p class="dim">Add a "Team" sheet (Role | Members) to show roster.</p>`;
+    $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
+    $("#next-date").textContent = "—";
+    $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
+    $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
+    $("#youtube-video").textContent = "—";
+    $("#top5").innerHTML = `<li class="dim">No data.</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
+    $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
   }
 });
