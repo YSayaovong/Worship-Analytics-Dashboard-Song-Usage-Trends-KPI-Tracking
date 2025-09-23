@@ -2,32 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hmong First Baptist Church — Praise & Worship</title>
+  <title>Hmong First Baptist Church – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="assets/css/styles.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a class="brand" href="./">Hmong FBC — P&W</a>
+      <div class="brand">Hmong First Baptist Church – Praise & Worship</div>
       <nav>
-        <a href="./archive.html">Setlist Archive</a>
-        <a href="./announcements.html">Announcements</a>
+        <a href="#home" class="nav-link">Home</a>
+        <a href="#archive" class="nav-link">Archive</a>
       </nav>
     </div>
   </header>
 
   <main class="container">
-    <section class="grid">
+    <!-- Home / Latest -->
+    <section id="home" class="route">
       <div class="card">
         <h2>Next Service Setlist</h2>
         <div id="latest-setlist">Loading latest setlist…</div>
+        <div id="youtube-video"></div>
       </div>
+    </section>
 
+    <!-- Archive -->
+    <section id="archive" class="route" hidden>
       <div class="card">
-        <h2>Latest Announcements</h2>
-        <div id="latest-announcements">Loading announcements…</div>
-        <p><a class="btn" href="./announcements.html">All announcements</a></p>
+        <h2>Setlist Archive</h2>
+        <ul id="archive-list" class="bullets"></ul>
       </div>
     </section>
   </main>
@@ -39,7 +43,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="assets/js/script.js"></script>
+  <script src="script.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
