@@ -2,21 +2,7 @@
    Pages:
      - index.html (Home): Announcements, Reminders, Bible Study (4 weeks), Members
      - reporting.html: Weekly Songs (+stories), Analytics, CCLI buckets, CSV export
-     - library.html: Left song list from Excel, right PDF viewer
      - hymnal.html: FlipHTML5 embed
-
-   Data sources (Excel in repo):
-     announcements/announcements.xlsx
-     bible_study/bible_study.xlsx
-     members/members.xlsx
-     setlist/setlist.xlsx  (optional current)
-     setlists/YYYY-MM-DD.xlsx  (archive)
-     songs/songs_index.xlsx  (Number, Title)
-     songs/pdfs/{Number}.pdf (PDFs you upload)
-
-   Stories:
-     - Auto-fetch from Wikipedia REST API; cached in localStorage.
-     - You can override by adding a "Story" column in your setlist files.
 */
 
 const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
@@ -25,23 +11,16 @@ const PATHS = {
   setlistsDir: "setlists",
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
-  bibleStudy: "bible_study/bible_study.xlsx",
-  libraryIndex: "songs/songs_index.xlsx",
-  pdfDir: "songs/pdfs"
+  bibleStudy: "bible_study/bible_study.xlsx"
 };
 
 // ---------- tiny DOM helpers ----------
 const $ = (s, r=document) => r.querySelector(s);
-const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
 // ---------- GitHub fetch helpers ----------
 const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
 const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
 
-async function existsOnGitHub(path){
-  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
-  return r.ok;
-}
 async function listDir(path){
   const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
   if(!r.ok) return [];
@@ -80,12 +59,8 @@ function normalizeAnnouncementText(s){
   out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2");
   return out.trim();
 }
-function truthy(v){
-  const s = String(v ?? "").trim().toLowerCase();
-  return ["1","true","yes","y","public domain","pd"].includes(s);
-}
 
-// ---------- generic table renderer (formats DATE headers) ----------
+// ---------- generic table renderer ----------
 function renderTable(aoa, targetSel){
   const el = $(targetSel);
   if(!el){ return; }
@@ -187,33 +162,13 @@ async function loadBibleStudy(){
   }
 }
 
-// ---------- members ----------
-async function loadMembers(){
-  const target = "#members-table";
-  try{
-    const wb = await fetchWB(PATHS.members);
-    const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length === 0){ $(target).textContent = "No members listed."; return; }
-    const headers = aoa[0].map(h=>String(h));
-    const preferred = ["Name","Role","Section","Instrument","Part","Phone","Email","Notes"];
-    const lower = headers.map(h=>h.toLowerCase());
-    const orderIdx = [];
-    preferred.forEach(p=>{ const i = lower.indexOf(p.toLowerCase()); if(i>=0) orderIdx.push(i); });
-    headers.forEach((_,i)=>{ if(!orderIdx.includes(i)) orderIdx.push(i); });
-    const ordered = aoa.map(row => orderIdx.map(i => row[i] ?? ""));
-    renderTable(ordered, target);
-  }catch(e){
-    $(target).innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
-  }
-}
-
 // ---------- setlists & analytics helpers ----------
 function toDateFromName(name){
   const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
 async function getDatedFiles(){
-  const items = await listDir(PATHS.setlistsDir);
+  const items = await listDir("setlists");
   return items
     .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
     .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
@@ -251,17 +206,14 @@ function parseMeta(wb, aoa){
 const STORY_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 function getStoryCache(){ try{ return JSON.parse(localStorage.getItem("songStoryCache")||"{}"); }catch{ return {}; } }
 function setStoryCache(cache){ localStorage.setItem("songStoryCache", JSON.stringify(cache)); }
-
 async function fetchWikipediaStory(title){
   const key = title.trim().toLowerCase();
   const cache = getStoryCache();
   const now = Date.now();
   if (cache[key] && (now - cache[key].ts) < STORY_TTL_MS) return cache[key].data;
 
-  // 1) If the title is very generic, add hints
   const q = `${title} song hymn meaning`;
   try{
-    // Search
     const sr = await fetch(`https://en.wikipedia.org/api/rest_v1/search/page?q=${encodeURIComponent(q)}&limit=5`);
     if(sr.ok){
       const sdata = await sr.json();
@@ -280,31 +232,25 @@ async function fetchWikipediaStory(title){
       }
     }
   }catch(_e){ /* ignore */ }
-
-  // Fallback: not found
   const empty = { summary: "", url: "" };
   cache[key] = { ts: now, data: empty }; setStoryCache(cache);
   return empty;
 }
-
 function storyCellHTML(text, url){
   if(!text && !url) return `<span class="story-cell dim">—</span>`;
   const short = text && text.length>220 ? (text.slice(0,217) + "…") : (text || "—");
   const link = url ? ` <a href="${url}" target="_blank" rel="noopener">Source</a>` : "";
   return `<span class="story-cell">${short}${link}</span>`;
 }
-
-// ---------- render setlist with Story column (async enrichment) ----------
 async function renderSetlistWithStories(containerSel, aoa){
   const el = $(containerSel);
   if(!aoa || aoa.length===0){ el.innerHTML = `<p class="dim">No data.</p>`; return; }
 
-  // locate columns
   const headers = aoa[0].map(h => String(h));
   const lower = headers.map(h=>h.toLowerCase());
   const songIdx = lower.indexOf("song") !== -1 ? lower.indexOf("song") : lower.indexOf("title");
-  const storyIdxExcel = lower.indexOf("story"); // if user provides Story in Excel
-  // Build initial table with an extra "Story" column
+  const storyIdxExcel = lower.indexOf("story");
+
   const finalHeaders = [...headers, "Story"];
   let html = "<table><tr>" + finalHeaders.map(h=>`<th class="small">${h}</th>`).join("") + "</tr>";
 
@@ -322,7 +268,6 @@ async function renderSetlistWithStories(containerSel, aoa){
   html += "</table>";
   el.innerHTML = html;
 
-  // Enrich where needed
   for(const m of rowsMeta){
     if(!m.title || m.storyProvided) continue;
     const { summary, url } = await fetchWikipediaStory(m.title);
@@ -333,21 +278,24 @@ async function renderSetlistWithStories(containerSel, aoa){
 
 // ---------- load setlists into Reporting page ----------
 async function loadSetlistsIntoReporting(){
-  const dated = await getDatedFiles();
-  const specialExists = await existsOnGitHub(PATHS.specialCurrent);
+  const items = await listDir(PATHS.setlistsDir);
+  const dated = items
+    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
+    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
+    .sort((a,b)=> a.date - b.date);
 
   let nextRendered = false;
-  let specialMeta = null;
 
-  if (specialExists) {
-    try {
+  // Prefer special current week if provided
+  try{
+    const r = await fetch(rawURL(PATHS.specialCurrent), { method:"HEAD" });
+    if (r.ok){
       const wb = await fetchWB(PATHS.specialCurrent);
       const aoa = firstSheetAOA(wb);
       const { sermon, serviceDate } = parseMeta(wb, aoa);
       $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
       await renderSetlistWithStories("#next-setlist", aoa);
       $("#next-sermon").textContent = sermon ? `Sermon: ${sermon}` : "";
-      nextRendered = true;
 
       // Last week from archive
       let last = null;
@@ -370,9 +318,9 @@ async function loadSetlistsIntoReporting(){
         $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
       }
 
-      specialMeta = { wb, aoa, serviceDate };
-    } catch { nextRendered = false; }
-  }
+      nextRendered = true;
+    }
+  }catch(_e){ /* ignore */ }
 
   if (!nextRendered) {
     if (dated.length === 0) {
@@ -380,7 +328,7 @@ async function loadSetlistsIntoReporting(){
       $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
       $("#last-date").textContent = "—";
       $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-      return { dated, specialMeta };
+      return { dated, specialMeta: null };
     }
 
     const today = new Date(); today.setHours(0,0,0,0);
@@ -409,13 +357,22 @@ async function loadSetlistsIntoReporting(){
     }
   }
 
-  return { dated, specialMeta };
+  return { dated, specialMeta: null };
 }
 
 // ---------- analytics + CCLI status + CSV export (Reporting page) ----------
 async function buildAnalyticsAndCCLI(dated, specialMeta){
   const currentYear = new Date().getFullYear();
   const PD_YEAR_CUTOFF = currentYear - 96;
+
+  // If 'dated' not provided, recompute from folder
+  if (!dated){
+    const items = await listDir("setlists");
+    dated = items
+      .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
+      .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
+      .sort((a,b)=> a.date - b.date);
+  }
   const datedThisYear = (dated || []).filter(f => f.date && f.date.getFullYear() === currentYear);
 
   const songInfo = new Map(); // title -> { plays, ccli, hasCCLI, pdFlag, year }
@@ -446,7 +403,7 @@ async function buildAnalyticsAndCCLI(dated, specialMeta){
         if (c) { info.ccli ||= c; info.hasCCLI = info.hasCCLI || /\d+/.test(c) || c.length>0; }
       }
       if (pdIdx >= 0 && row[pdIdx] != null){
-        if (truthy(row[pdIdx])) info.pdFlag = true;
+        if (["1","true","yes","y","public domain","pd"].includes(String(row[pdIdx]).trim().toLowerCase())) info.pdFlag = true;
       }
       if (yrIdx >= 0 && row[yrIdx] != null){
         const y = coerceYear(row[yrIdx]);
@@ -456,15 +413,10 @@ async function buildAnalyticsAndCCLI(dated, specialMeta){
     }
   }
 
-  const includeSpecial = !!specialMeta && (!specialMeta.serviceDate || specialMeta.serviceDate.getFullYear() === currentYear);
-  if (datedThisYear.length === 0 && includeSpecial) {
-    await accumulateFromWB(specialMeta.wb);
-  } else {
-    for (const f of datedThisYear) {
-      const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
-      await accumulateFromWB(wb);
-    }
-    if (includeSpecial) await accumulateFromWB(specialMeta.wb);
+  // Aggregate this year's archive
+  for (const f of datedThisYear) {
+    const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
+    await accumulateFromWB(wb);
   }
 
   // Rankings
@@ -532,17 +484,14 @@ function renderCharts(entries){
   const pieEl = document.getElementById("pieChart");
   if (barChart) { barChart.destroy(); barChart = null; }
   if (pieChart) { pieChart.destroy(); pieChart = null; }
-
   if (!entries || entries.length === 0){
     if (barEl) barEl.replaceWith(barEl.cloneNode(true));
     if (pieEl) pieEl.replaceWith(pieEl.cloneNode(true));
     return;
   }
-
   const topN = entries.slice(0,10);
   const labels = topN.map(([t])=>t);
   const counts = topN.map(([,c])=>c);
-
   if (barEl){
     barChart = new Chart(barEl.getContext("2d"), {
       type: "bar",
@@ -562,63 +511,23 @@ function renderCharts(entries){
   }
 }
 
-// ---------- Library page (index + PDF viewer) ----------
-async function loadLibrary(){
-  const listEl = $("#song-list");
-  const searchEl = $("#song-search");
-  const pdfTitle = $("#pdf-title");
-  const pdfObj = $("#pdf-frame");
-  const pdfLink = $("#pdf-link");
-
-  let rows = [];
-  try{
-    const wb = await fetchWB(PATHS.libraryIndex);
-    const aoa = firstSheetAOA(wb);
-    const hdr = (aoa[0]||[]).map(h=>String(h).toLowerCase());
-    const ni = hdr.indexOf("number");
-    const ti = hdr.indexOf("title");
-    rows = aoa.slice(1)
-      .map(r => ({ num: Number(r[ni]), title: (r[ti]||"").toString().trim() }))
-      .filter(x => Number.isFinite(x.num) && x.title);
-  }catch(_e){
-    // fallback placeholders 1..352
-    rows = Array.from({length:352}, (_,i)=>({ num: i+1, title: `Song #${i+1}` }));
-  }
-
-  function renderList(items){
-    listEl.innerHTML = "";
-    items.forEach(item=>{
-      const div = document.createElement("div");
-      div.className = "song-item";
-      div.innerHTML = `<span>#${item.num}</span><span class="song-meta">${item.title}</span>`;
-      div.addEventListener("click", ()=>{
-        const path = `${PATHS.pdfDir}/${item.num}.pdf`;
-        const url = rawURL(path);
-        pdfTitle.textContent = `#${item.num} — ${item.title}`;
-        pdfObj.setAttribute("data", url);
-        $("#pdf-link").setAttribute("href", url);
-      });
-      listEl.appendChild(div);
-    });
-  }
-
-  renderList(rows);
-
-  searchEl?.addEventListener("input", (e)=>{
-    const q = e.target.value.trim().toLowerCase();
-    const filtered = rows.filter(x => String(x.num).includes(q) || x.title.toLowerCase().includes(q));
-    renderList(filtered);
-  });
-}
-
 // ---------- Page dispatcher ----------
 document.addEventListener("DOMContentLoaded", async ()=>{
   const page = document.body.getAttribute("data-page");
 
   if (page === "home"){
     await loadAnnouncements();
-    await loadMembers();
     await loadBibleStudy();
+    // Members loaded on Home (kept here to ensure order)
+    const target = "#members-table";
+    try{
+      const wb = await fetchWB(PATHS.members);
+      const aoa = firstSheetAOA(wb);
+      if(!aoa || aoa.length === 0){ $(target).textContent = "No members listed."; return; }
+      renderTable(aoa, target);
+    }catch{
+      $(target).innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
+    }
   }
 
   if (page === "reporting"){
@@ -626,7 +535,5 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     await buildAnalyticsAndCCLI(dated, specialMeta);
   }
 
-  if (page === "library"){
-    await loadLibrary();
-  }
+  // No library page anymore
 });
