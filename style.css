@@ -34,6 +34,8 @@ nav a:hover{color:var(--primary-2)}
 .grid{display:grid;gap:1rem}
 .grid.two{grid-template-columns:1fr}
 @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
+.grid.two-70-30{grid-template-columns:1fr}
+@media(min-width:900px){.grid.two-70-30{grid-template-columns:70% 30%}}
 
 .meta{color:var(--muted);margin:.2rem 0 .8rem}
 .dim{color:var(--muted)}
@@ -51,6 +53,18 @@ th{background:#0e1530}
 /* Charts */
 .charts .chart-wrap{position:relative;height:300px}
 @media(min-width:900px){.charts .chart-wrap{height:360px}}
+
+/* Reminder card */
+.reminder-card{display:flex;flex-direction:column;gap:.5rem}
+.reminder-title{margin:.2rem 0 .2rem 0;font-size:1.2rem}
+.reminder-list{list-style:none;margin:0;padding:0}
+.reminder-list li{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.55rem .65rem;border:1px solid var(--border);border-radius:10px;
+  background:#111a33;margin-bottom:.45rem
+}
+.reminder-label{font-weight:600}
+.reminder-time{opacity:.95}
 
 /* Footer */
 .site-footer{border-top:1px solid var(--border)}

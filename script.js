@@ -2,12 +2,13 @@
    Static site (no backend) powered by Excel files on GitHub.
 
    Reads weekly content:
-     • /setlist/setlist.xlsx           (preferred "This Coming Week")
-     • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
+     • /setlist/setlist.xlsx              (preferred "This Coming Week")
+     • /setlists/YYYY-MM-DD.xlsx          (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx  (hide >31 days)
-     • /weekly_leader/weekly_leader.xlsx  (current week's leader)
+     • /members/members.xlsx              (team roster)
 
-   Analytics: current calendar year only; Song + Plays (no keys). Also renders bar & pie charts.
+   Analytics: current calendar year only; Song + Plays (no keys).
+   Charts: Bar + Pie via Chart.js.
 */
 
 // ---- repo config ----
@@ -16,7 +17,7 @@ const PATHS = {
   specialCurrent: "setlist/setlist.xlsx",
   setlistsDir: "setlists",
   announcements: "announcements/announcements.xlsx",
-  leader: "weekly_leader/weekly_leader.xlsx"
+  members: "members/members.xlsx"
 };
 
 // ---- basic helpers ----
@@ -43,7 +44,7 @@ function firstSheetAOA(wb){
   const sh = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sh, { header:1, defval:"" });
 }
-function toDateFromName(name){ // 2025-10-05.xlsx
+function toDateFromName(name){
   const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
@@ -276,67 +277,37 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- weekly leader (current week only) ----
-async function loadWeeklyLeader(){
+// ---- members (flexible columns) ----
+async function loadMembers(){
   try{
-    const wb = await fetchWB(PATHS.leader);
+    const wb = await fetchWB(PATHS.members);
     const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length <= 1){
-      $("#leader-week").textContent = "No leader assigned yet.";
-      $("#leader-list").innerHTML = `<p class="dim">Add rows to <code>${PATHS.leader}</code> (Date | Leader).</p>`;
+    if(!aoa || aoa.length === 0){
+      $("#members-table").textContent = "No members listed.";
       return;
     }
 
-    const headers = aoa[0].map(h => String(h));
-    const dateIdx = headers.findIndex(h => /date/i.test(h));
-    const leaderIdx = headers.findIndex(h => /(leader|worship\s*lead|led\s*by|name)/i.test(h));
-    if (dateIdx === -1 || leaderIdx === -1){
-      $("#leader-week").textContent = "Missing Date or Leader column.";
-      $("#leader-list").innerHTML = `<p class="dim">Expected columns: Date, Leader.</p>`;
-      return;
-    }
+    // Prefer common columns ordering if present
+    const headers = aoa[0].map(h=>String(h));
+    const preferred = ["Name","Role","Section","Instrument","Part","Phone","Email","Notes"];
+    const lowerHeaders = headers.map(h=>h.toLowerCase());
 
-    const rows = aoa.slice(1).map(r=>{
-      const d = excelSerialToDate(r[dateIdx]) || new Date(r[dateIdx]);
-      const leader = (r[leaderIdx] || "").toString().trim();
-      return { d: (d && !isNaN(d)) ? d : null, leader };
-    }).filter(x => x.d && x.leader);
+    // Map preferred headers to existing columns, else keep as-is
+    const orderIdx = [];
+    preferred.forEach(p=>{
+      const idx = lowerHeaders.indexOf(p.toLowerCase());
+      if(idx>=0) orderIdx.push(idx);
+    });
+    // Add any remaining columns that weren't matched
+    headers.forEach((_,i)=>{ if(!orderIdx.includes(i)) orderIdx.push(i); });
 
-    if (rows.length === 0){
-      $("#leader-week").textContent = "No valid entries.";
-      $("#leader-list").innerHTML = `<p class="dim">Please add dates and names.</p>`;
-      return;
-    }
+    // Rebuild AOA with ordered columns
+    const ordered = aoa.map(row => orderIdx.map(i => row[i] ?? ""));
 
-    const today = new Date(); const { start, end } = weekRangeSunday(today);
-    const curWeek = rows.filter(x => x.d >= start && x.d <= end);
-
-    // If none for this week, show next upcoming week (optional fallback)
-    let display = curWeek;
-    if (display.length === 0){
-      const nextFuture = rows.filter(x => x.d > end).sort((a,b)=> a.d - b.d);
-      if (nextFuture.length){
-        const { start: ns, end: ne } = weekRangeSunday(nextFuture[0].d);
-        display = rows.filter(x => x.d >= ns && x.d <= ne);
-        $("#leader-week").textContent = `${niceDate(ns)} – ${niceDate(ne)}`;
-      } else {
-        $("#leader-week").textContent = `${niceDate(start)} – ${niceDate(end)}`;
-      }
-    } else {
-      $("#leader-week").textContent = `${niceDate(start)} – ${niceDate(end)}`;
-    }
-
-    if (display.length === 0){
-      $("#leader-list").innerHTML = `<p class="dim">No leader listed for this or upcoming weeks.</p>`;
-      return;
-    }
-
-    const names = Array.from(new Set(display.map(x => x.leader))).sort((a,b)=> a.localeCompare(b));
-    $("#leader-list").innerHTML = `<ul class="ranked">${names.map(n=>`<li><strong>${n}</strong></li>`).join("")}</ul>`;
+    // Render
+    renderTable(ordered, "#members-table");
   }catch(e){
-    console.error(e);
-    $("#leader-week").textContent = "Unable to load weekly leader.";
-    $("#leader-list").innerHTML = `<p class="dim">Ensure <code>${PATHS.leader}</code> exists with Date & Leader columns.</p>`;
+    $("#members-table").innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
   }
 }
 
@@ -383,12 +354,10 @@ async function buildAnalytics(dated, specialMeta){
     $("#top5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
     $("#bottom5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No setlists found for ${currentYear}.</p>`;
-    // clear charts if any
     renderCharts([]);
     return;
   }
 
-  // Rankings
   const entries = Array.from(songCounts.entries()); // [title, count]
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
@@ -423,7 +392,6 @@ function renderCharts(entries){
   const barEl = document.getElementById("barChart");
   const pieEl = document.getElementById("pieChart");
 
-  // destroy existing if present
   if (barChart) { barChart.destroy(); barChart = null; }
   if (pieChart) { pieChart.destroy(); pieChart = null; }
 
@@ -450,7 +418,7 @@ function renderCharts(entries){
     });
   }
 
-  const pieN = entries.slice(0,8); // keep labels readable
+  const pieN = entries.slice(0,8);
   const pieLabels = pieN.map(([t])=>t);
   const pieCounts = pieN.map(([,c])=>c);
 
@@ -467,14 +435,13 @@ function renderCharts(entries){
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
-    await loadWeeklyLeader();
+    await loadMembers();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
-    $("#leader-week").textContent = "—";
-    $("#leader-list").innerHTML = `<p class="dim">Unable to load weekly leader.</p>`;
+    $("#members-table").innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
     $("#next-date").textContent = "—";
     $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
     $("#last-setlist").innerHTML = `<p class="dim">—</p>`;

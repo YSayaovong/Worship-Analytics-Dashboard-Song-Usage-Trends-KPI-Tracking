@@ -13,7 +13,7 @@
       <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
       <nav>
         <a href="#announcements">Announcements</a>
-        <a href="#leader">Weekly Leader</a>
+        <a href="#members">Members</a>
         <a href="#setlists">Setlists</a>
         <a href="#analytics">Song Analytics</a>
       </nav>
@@ -21,23 +21,40 @@
   </header>
 
   <main id="top">
-    <!-- Announcements -->
+    <!-- Announcements + Reminders -->
     <section id="announcements" class="section">
       <div class="container">
         <h2 class="section-title">Announcements</h2>
-        <div id="announcements-table" class="card">Loading announcements…</div>
+        <div class="grid two-70-30">
+          <div id="announcements-table" class="card">Loading announcements…</div>
+
+          <!-- Professional reminder card (static content) -->
+          <aside class="card reminder-card">
+            <h3 class="reminder-title">Reminders</h3>
+            <ul class="reminder-list">
+              <li>
+                <div class="reminder-label">Thursday Practice</div>
+                <div class="reminder-time">6:00 PM – 8:00 PM</div>
+              </li>
+              <li>
+                <div class="reminder-label">Sunday Practice</div>
+                <div class="reminder-time">8:40 AM – 9:30 AM</div>
+              </li>
+            </ul>
+            <p class="reminder-note dim small">
+              Please arrive 10 minutes early to set up and tune. Bring chord charts if needed.
+            </p>
+          </aside>
+        </div>
       </div>
     </section>
 
-    <!-- Weekly Leader -->
-    <section id="leader" class="section alt">
+    <!-- Members -->
+    <section id="members" class="section alt">
       <div class="container">
-        <h2 class="section-title">Weekly Leader</h2>
-        <div class="card">
-          <p id="leader-week" class="meta">Loading this week…</p>
-          <div id="leader-list">Please wait…</div>
-          <p class="dim small">Source: <code>weekly_leader/weekly_leader.xlsx</code></p>
-        </div>
+        <h2 class="section-title">Worship Team Members</h2>
+        <div id="members-table" class="card">Loading members…</div>
+        <p class="dim small">Source: <code>members/members.xlsx</code></p>
       </div>
     </section>
 
@@ -107,7 +124,6 @@
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
   <script src="script.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
