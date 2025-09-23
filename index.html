@@ -13,6 +13,7 @@
       <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
       <nav>
         <a href="#announcements">Announcements</a>
+        <a href="#leader">Weekly Leader</a>
         <a href="#setlists">Setlists</a>
         <a href="#analytics">Song Analytics</a>
       </nav>
@@ -28,12 +29,23 @@
       </div>
     </section>
 
+    <!-- Weekly Leader -->
+    <section id="leader" class="section alt">
+      <div class="container">
+        <h2 class="section-title">Weekly Leader</h2>
+        <div class="card">
+          <p id="leader-week" class="meta">Loading this week…</p>
+          <div id="leader-list">Please wait…</div>
+          <p class="dim small">Source: <code>weekly_leader/weekly_leader.xlsx</code></p>
+        </div>
+      </div>
+    </section>
+
     <!-- Setlists -->
-    <section id="setlists" class="section alt">
+    <section id="setlists" class="section">
       <div class="container">
         <h2 class="section-title">Setlists</h2>
         <div class="grid two">
-          <!-- Coming Week -->
           <article class="card">
             <h3>This Coming Week</h3>
             <p id="next-date" class="meta">Detecting next service…</p>
@@ -41,7 +53,6 @@
             <div id="next-setlist">Please wait…</div>
           </article>
 
-          <!-- Last Week -->
           <article class="card">
             <h3>Last Week</h3>
             <p id="last-date" class="meta">—</p>
@@ -67,6 +78,17 @@
           </article>
         </div>
 
+        <div class="grid two charts">
+          <article class="card">
+            <h3>Top Songs (Bar)</h3>
+            <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+          </article>
+          <article class="card">
+            <h3>Top Songs (Pie)</h3>
+            <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+          </article>
+        </div>
+
         <div class="card">
           <h3>Song Library (Current Year)</h3>
           <p class="dim small">Unique songs and play counts this year.</p>
@@ -82,8 +104,10 @@
     </div>
   </footer>
 
-  <!-- SheetJS for reading Excel -->
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <script src="script.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>

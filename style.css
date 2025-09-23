@@ -48,5 +48,9 @@ th{background:#0e1530}
 .ranked{margin:.2rem 0 .2rem 1.25rem}
 .ranked li{margin:.25rem 0}
 
+/* Charts */
+.charts .chart-wrap{position:relative;height:300px}
+@media(min-width:900px){.charts .chart-wrap{height:360px}}
+
 /* Footer */
 .site-footer{border-top:1px solid var(--border)}

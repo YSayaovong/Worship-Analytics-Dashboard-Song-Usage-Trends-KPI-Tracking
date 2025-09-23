@@ -4,10 +4,10 @@
    Reads weekly content:
      • /setlist/setlist.xlsx           (preferred "This Coming Week")
      • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
-     • /announcements/announcements.xlsx
+     • /announcements/announcements.xlsx  (hide >31 days)
+     • /weekly_leader/weekly_leader.xlsx  (current week's leader)
 
-   Announcements older than 31 days are hidden automatically.
-   Analytics: current calendar year only, Song + Plays (no keys).
+   Analytics: current calendar year only; Song + Plays (no keys). Also renders bar & pie charts.
 */
 
 // ---- repo config ----
@@ -15,7 +15,8 @@ const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 const PATHS = {
   specialCurrent: "setlist/setlist.xlsx",
   setlistsDir: "setlists",
-  announcements: "announcements/announcements.xlsx"
+  announcements: "announcements/announcements.xlsx",
+  leader: "weekly_leader/weekly_leader.xlsx"
 };
 
 // ---- basic helpers ----
@@ -49,8 +50,14 @@ function toDateFromName(name){ // 2025-10-05.xlsx
 function niceDate(d){
   return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
 }
+function weekRangeSunday(d){
+  const start = new Date(d); start.setHours(0,0,0,0);
+  start.setDate(start.getDate() - start.getDay()); // Sunday
+  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
+  return { start, end };
+}
 
-// ---- Excel date + text helpers ----
+// ---- Excel helpers ----
 function excelSerialToDate(val){
   if (typeof val === "number") {
     const o = XLSX.SSF.parse_date_code(val);
@@ -69,8 +76,8 @@ function excelSerialToDate(val){
 }
 function normalizeAnnouncementText(s){
   let out = String(s ?? "");
-  out = out.replace(/:(?=\d)/g, ": "); // add space after ":" before a digit
-  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2"); // word then date
+  out = out.replace(/:(?=\d)/g, ": ");
+  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2");
   return out.trim();
 }
 
@@ -162,10 +169,8 @@ async function loadAnnouncements(){
         const txt = normalizeAnnouncementText(r[idxText] || "");
         return { d: validDate, ds, txt };
       })
-      // Keep only rows with a valid date that is within the last 31 days
       .filter(r => r.d && r.d >= cutoff);
 
-    // Sort newest first
     rows.sort((a,b)=> b.d - a.d);
 
     if (rows.length === 0){
@@ -271,10 +276,73 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- analytics (Current Year, no keys) ----
+// ---- weekly leader (current week only) ----
+async function loadWeeklyLeader(){
+  try{
+    const wb = await fetchWB(PATHS.leader);
+    const aoa = firstSheetAOA(wb);
+    if(!aoa || aoa.length <= 1){
+      $("#leader-week").textContent = "No leader assigned yet.";
+      $("#leader-list").innerHTML = `<p class="dim">Add rows to <code>${PATHS.leader}</code> (Date | Leader).</p>`;
+      return;
+    }
+
+    const headers = aoa[0].map(h => String(h));
+    const dateIdx = headers.findIndex(h => /date/i.test(h));
+    const leaderIdx = headers.findIndex(h => /(leader|worship\s*lead|led\s*by|name)/i.test(h));
+    if (dateIdx === -1 || leaderIdx === -1){
+      $("#leader-week").textContent = "Missing Date or Leader column.";
+      $("#leader-list").innerHTML = `<p class="dim">Expected columns: Date, Leader.</p>`;
+      return;
+    }
+
+    const rows = aoa.slice(1).map(r=>{
+      const d = excelSerialToDate(r[dateIdx]) || new Date(r[dateIdx]);
+      const leader = (r[leaderIdx] || "").toString().trim();
+      return { d: (d && !isNaN(d)) ? d : null, leader };
+    }).filter(x => x.d && x.leader);
+
+    if (rows.length === 0){
+      $("#leader-week").textContent = "No valid entries.";
+      $("#leader-list").innerHTML = `<p class="dim">Please add dates and names.</p>`;
+      return;
+    }
+
+    const today = new Date(); const { start, end } = weekRangeSunday(today);
+    const curWeek = rows.filter(x => x.d >= start && x.d <= end);
+
+    // If none for this week, show next upcoming week (optional fallback)
+    let display = curWeek;
+    if (display.length === 0){
+      const nextFuture = rows.filter(x => x.d > end).sort((a,b)=> a.d - b.d);
+      if (nextFuture.length){
+        const { start: ns, end: ne } = weekRangeSunday(nextFuture[0].d);
+        display = rows.filter(x => x.d >= ns && x.d <= ne);
+        $("#leader-week").textContent = `${niceDate(ns)} – ${niceDate(ne)}`;
+      } else {
+        $("#leader-week").textContent = `${niceDate(start)} – ${niceDate(end)}`;
+      }
+    } else {
+      $("#leader-week").textContent = `${niceDate(start)} – ${niceDate(end)}`;
+    }
+
+    if (display.length === 0){
+      $("#leader-list").innerHTML = `<p class="dim">No leader listed for this or upcoming weeks.</p>`;
+      return;
+    }
+
+    const names = Array.from(new Set(display.map(x => x.leader))).sort((a,b)=> a.localeCompare(b));
+    $("#leader-list").innerHTML = `<ul class="ranked">${names.map(n=>`<li><strong>${n}</strong></li>`).join("")}</ul>`;
+  }catch(e){
+    console.error(e);
+    $("#leader-week").textContent = "Unable to load weekly leader.";
+    $("#leader-list").innerHTML = `<p class="dim">Ensure <code>${PATHS.leader}</code> exists with Date & Leader columns.</p>`;
+  }
+}
+
+// ---- analytics (Current Year, no keys) + charts ----
 async function buildAnalytics(dated, specialMeta){
   const currentYear = new Date().getFullYear();
-
   const datedThisYear = (dated || []).filter(
     f => f.date && f.date.getFullYear() === currentYear
   );
@@ -295,9 +363,6 @@ async function buildAnalytics(dated, specialMeta){
     }
   }
 
-  // Include special "current" setlist if:
-  //  - it has a serviceDate in the current year, OR
-  //  - no date provided (assume current year to reflect newest songs)
   const includeSpecial =
     !!specialMeta && (
       !specialMeta.serviceDate ||
@@ -311,18 +376,19 @@ async function buildAnalytics(dated, specialMeta){
       const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
       await accumulateFromWB(wb);
     }
-    if (includeSpecial) {
-      await accumulateFromWB(specialMeta.wb);
-    }
+    if (includeSpecial) await accumulateFromWB(specialMeta.wb);
   }
 
   if (songCounts.size === 0) {
     $("#top5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
     $("#bottom5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No setlists found for ${currentYear}.</p>`;
+    // clear charts if any
+    renderCharts([]);
     return;
   }
 
+  // Rankings
   const entries = Array.from(songCounts.entries()); // [title, count]
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
@@ -346,22 +412,75 @@ async function buildAnalytics(dated, specialMeta){
   }
   html += "</table>";
   $("#library-table").innerHTML = html;
+
+  // Charts
+  renderCharts(entries);
+}
+
+// ---- charts (Chart.js) ----
+let barChart, pieChart;
+function renderCharts(entries){
+  const barEl = document.getElementById("barChart");
+  const pieEl = document.getElementById("pieChart");
+
+  // destroy existing if present
+  if (barChart) { barChart.destroy(); barChart = null; }
+  if (pieChart) { pieChart.destroy(); pieChart = null; }
+
+  if (!entries || entries.length === 0){
+    if (barEl) barEl.replaceWith(barEl.cloneNode(true));
+    if (pieEl) pieEl.replaceWith(pieEl.cloneNode(true));
+    return;
+  }
+
+  const topN = entries.slice(0,10);
+  const labels = topN.map(([t])=>t);
+  const counts = topN.map(([,c])=>c);
+
+  if (barEl){
+    barChart = new Chart(barEl.getContext("2d"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Plays (Top 10)", data: counts }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  const pieN = entries.slice(0,8); // keep labels readable
+  const pieLabels = pieN.map(([t])=>t);
+  const pieCounts = pieN.map(([,c])=>c);
+
+  if (pieEl){
+    pieChart = new Chart(pieEl.getContext("2d"), {
+      type: "pie",
+      data: { labels: pieLabels, datasets: [{ data: pieCounts }] },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }
 }
 
 // ---- boot ----
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
+    await loadWeeklyLeader();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
+    $("#leader-week").textContent = "—";
+    $("#leader-list").innerHTML = `<p class="dim">Unable to load weekly leader.</p>`;
     $("#next-date").textContent = "—";
     $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
     $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
     $("#top5").innerHTML = `<li class="dim">No data.</li>`;
     $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
+    renderCharts([]);
   }
 });
