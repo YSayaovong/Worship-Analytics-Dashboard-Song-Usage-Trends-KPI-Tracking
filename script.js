@@ -292,19 +292,15 @@ async function loadMembers(){
     const preferred = ["Name","Role","Section","Instrument","Part","Phone","Email","Notes"];
     const lowerHeaders = headers.map(h=>h.toLowerCase());
 
-    // Map preferred headers to existing columns, else keep as-is
     const orderIdx = [];
     preferred.forEach(p=>{
       const idx = lowerHeaders.indexOf(p.toLowerCase());
       if(idx>=0) orderIdx.push(idx);
     });
-    // Add any remaining columns that weren't matched
     headers.forEach((_,i)=>{ if(!orderIdx.includes(i)) orderIdx.push(i); });
 
-    // Rebuild AOA with ordered columns
     const ordered = aoa.map(row => orderIdx.map(i => row[i] ?? ""));
 
-    // Render
     renderTable(ordered, "#members-table");
   }catch(e){
     $("#members-table").innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;

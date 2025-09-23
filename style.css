@@ -34,8 +34,9 @@ nav a:hover{color:var(--primary-2)}
 .grid{display:grid;gap:1rem}
 .grid.two{grid-template-columns:1fr}
 @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
-.grid.two-70-30{grid-template-columns:1fr}
-@media(min-width:900px){.grid.two-70-30{grid-template-columns:70% 30%}}
+
+.grid.three{grid-template-columns:1fr}
+@media(min-width:900px){.grid.three{grid-template-columns:2fr 1fr 1fr}}
 
 .meta{color:var(--muted);margin:.2rem 0 .8rem}
 .dim{color:var(--muted)}
@@ -56,7 +57,6 @@ th{background:#0e1530}
 
 /* Reminder card */
 .reminder-card{display:flex;flex-direction:column;gap:.5rem}
-.reminder-title{margin:.2rem 0 .2rem 0;font-size:1.2rem}
 .reminder-list{list-style:none;margin:0;padding:0}
 .reminder-list li{
   display:flex;justify-content:space-between;align-items:center;

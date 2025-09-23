@@ -21,16 +21,19 @@
   </header>
 
   <main id="top">
-    <!-- Announcements + Reminders -->
-    <section id="announcements" class="section">
+    <!-- Top board: Announcements • Reminders • Members -->
+    <section id="top-cards" class="section">
       <div class="container">
-        <h2 class="section-title">Announcements</h2>
-        <div class="grid two-70-30">
-          <div id="announcements-table" class="card">Loading announcements…</div>
+        <div class="grid three">
+          <!-- Announcements -->
+          <article class="card" id="announcements">
+            <h2 class="section-title">Announcements</h2>
+            <div id="announcements-table">Loading announcements…</div>
+          </article>
 
-          <!-- Professional reminder card (static content) -->
-          <aside class="card reminder-card">
-            <h3 class="reminder-title">Reminders</h3>
+          <!-- Reminders -->
+          <aside class="card reminder-card" id="reminders">
+            <h2 class="section-title">Reminders</h2>
             <ul class="reminder-list">
               <li>
                 <div class="reminder-label">Thursday Practice</div>
@@ -42,24 +45,22 @@
               </li>
             </ul>
             <p class="reminder-note dim small">
-              Please arrive 10 minutes early to set up and tune. Bring chord charts if needed.
+              Please arrive 10 minutes early to set up and tune. Bring chord charts as needed.
             </p>
           </aside>
+
+          <!-- Members -->
+          <article class="card" id="members">
+            <h2 class="section-title">Worship Team Members</h2>
+            <div id="members-table">Loading members…</div>
+            <p class="dim small">Source: <code>members/members.xlsx</code></p>
+          </article>
         </div>
       </div>
     </section>
 
-    <!-- Members -->
-    <section id="members" class="section alt">
-      <div class="container">
-        <h2 class="section-title">Worship Team Members</h2>
-        <div id="members-table" class="card">Loading members…</div>
-        <p class="dim small">Source: <code>members/members.xlsx</code></p>
-      </div>
-    </section>
-
     <!-- Setlists -->
-    <section id="setlists" class="section">
+    <section id="setlists" class="section alt">
       <div class="container">
         <h2 class="section-title">Setlists</h2>
         <div class="grid two">
