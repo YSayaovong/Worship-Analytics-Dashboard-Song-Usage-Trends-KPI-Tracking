@@ -5,6 +5,9 @@
      • /setlist/setlist.xlsx           (preferred "This Coming Week")
      • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx
+
+   Announcements older than 31 days are hidden automatically.
+   Analytics: current calendar year only, Song + Plays (no keys).
 */
 
 // ---- repo config ----
@@ -135,7 +138,7 @@ function parseMeta(wb, aoa){
   return { sermon, serviceDate };
 }
 
-// ---- announcements ----
+// ---- announcements (hide older than 31 days) ----
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
@@ -148,26 +151,32 @@ async function loadAnnouncements(){
     const idxDate = dateIdx >= 0 ? dateIdx : 0;
     const idxText = textIdx >= 0 ? textIdx : 1;
 
-    const rows = aoa.slice(1)
+    const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate() - 31);
+
+    let rows = aoa.slice(1)
       .filter(r => r.some(c => String(c).trim()!==""))
       .map(r => {
         const d = excelSerialToDate(r[idxDate]) || new Date(r[idxDate]);
-        const ds = (!isNaN(d)) ? niceDate(d) : String(r[idxDate]);
+        const validDate = (d && !isNaN(d)) ? d : null;
+        const ds = validDate ? niceDate(validDate) : String(r[idxDate]);
         const txt = normalizeAnnouncementText(r[idxText] || "");
-        return { d: (!isNaN(d) ? d : null), ds, txt };
-      });
+        return { d: validDate, ds, txt };
+      })
+      // Keep only rows with a valid date that is within the last 31 days
+      .filter(r => r.d && r.d >= cutoff);
 
-    rows.sort((a,b)=>{
-      if(a.d && b.d) return b.d - a.d;
-      if(a.d) return -1;
-      if(b.d) return 1;
-      return 0;
-    });
+    // Sort newest first
+    rows.sort((a,b)=> b.d - a.d);
+
+    if (rows.length === 0){
+      $("#announcements-table").innerHTML = `<p class="dim">No announcements in the last 31 days.</p>`;
+      return;
+    }
 
     const pretty = [["DATE","ANNOUNCEMENT"], ...rows.map(r => [r.ds, r.txt])];
     renderTable(pretty, "#announcements-table");
   }catch(e){
-    $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Title/Announcement | Details.</p>`;
+    $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Announcement.</p>`;
   }
 }
 
@@ -262,32 +271,27 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- analytics (Current Year) ----
+// ---- analytics (Current Year, no keys) ----
 async function buildAnalytics(dated, specialMeta){
   const currentYear = new Date().getFullYear();
+
   const datedThisYear = (dated || []).filter(
     f => f.date && f.date.getFullYear() === currentYear
   );
 
   const songCounts = new Map();  // title -> plays
-  const songKeys   = new Map();  // title -> Set(keys)
 
   async function accumulateFromWB(wb){
     const aoa = firstSheetAOA(wb);
     if(!aoa || aoa.length===0) return;
     const headers = aoa[0].map(h => String(h).toLowerCase());
     const ti = headers.indexOf("song") !== -1 ? headers.indexOf("song") : headers.indexOf("title");
-    const ki = headers.indexOf("key");
     if(ti === -1) return;
 
     for(const row of aoa.slice(1)){
       const title = (row[ti] || "").toString().trim();
       if(!title) continue;
-      const key = ki>=0 ? (row[ki] || "").toString().trim() : "";
-
       songCounts.set(title, (songCounts.get(title)||0) + 1);
-      if(!songKeys.has(title)) songKeys.set(title, new Set());
-      if(key) songKeys.get(title).add(key);
     }
   }
 
@@ -319,7 +323,7 @@ async function buildAnalytics(dated, specialMeta){
     return;
   }
 
-  const entries = Array.from(songCounts.entries());
+  const entries = Array.from(songCounts.entries()); // [title, count]
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
   const top5 = entries.slice(0,5);
@@ -332,14 +336,13 @@ async function buildAnalytics(dated, specialMeta){
     .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
     .join("");
 
-  // Library (current year)
-  const header = ["Song","Keys Used","Plays"];
+  // Library (current year) — Song + Plays only
+  const header = ["Song","Plays"];
   let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
   const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
   for (const t of titles) {
-    const keysUsed = songKeys.get(t) ? Array.from(songKeys.get(t)).sort().join(", ") : "";
     const plays = songCounts.get(t) || 0;
-    html += `<tr><td>${t}</td><td>${keysUsed}</td><td>${plays}</td></tr>`;
+    html += `<tr><td>${t}</td><td>${plays}</td></tr>`;
   }
   html += "</table>";
   $("#library-table").innerHTML = html;
