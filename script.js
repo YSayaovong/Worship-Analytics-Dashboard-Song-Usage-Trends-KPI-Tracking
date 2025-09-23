@@ -6,10 +6,12 @@
      • /setlists/YYYY-MM-DD.xlsx          (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx  (hide >31 days)
      • /members/members.xlsx              (team roster)
-     • /bible_study/bible_study.xlsx      (Bible Study)
+     • /bible_study/bible_study.xlsx      (Bible Study; last 4 weeks only)
 
    Analytics: current calendar year only; Song + Plays (no keys).
    Charts: Bar + Pie via Chart.js.
+   Header: decorative music notes & cross icon.
+   Optional: background music (muted by default), random track each visit (see initMusic()).
 */
 
 // ---- repo config ----
@@ -51,7 +53,13 @@ function toDateFromName(name){
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
 function niceDate(d){
-  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" });
+  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
+}
+function weekRangeSunday(d){
+  const start = new Date(d); start.setHours(0,0,0,0);
+  start.setDate(start.getDate() - start.getDay()); // Sunday
+  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
+  return { start, end };
 }
 
 // ---- Excel helpers ----
@@ -182,7 +190,7 @@ async function loadAnnouncements(){
   }
 }
 
-// ---- Bible Study ----
+// ---- Bible Study (last 4 weeks only) ----
 async function loadBibleStudy(){
   try{
     const wb = await fetchWB(PATHS.bibleStudy);
@@ -191,23 +199,32 @@ async function loadBibleStudy(){
       $("#bible-study-table").textContent = "No Bible study items.";
       return;
     }
+
     const headers = aoa[0].map(h => String(h));
     const di = headers.findIndex(h => /date/i.test(h));
-    let output = aoa;
-    if (di !== -1){
-      const rows = aoa
-        .slice(1)
-        .filter(r => r.some(c => String(c).trim()!==""))
-        .map(r => ({ r, d: excelSerialToDate(r[di]) || new Date(r[di]) }))
-        .sort((a,b) => {
-          if (a.d && b.d) return a.d - b.d;
-          if (a.d) return -1;
-          if (b.d) return 1;
-          return 0;
-        })
-        .map(x => x.r);
-      output = [headers, ...rows];
+
+    if (di === -1){
+      renderTable(aoa, "#bible-study-table");
+      return;
     }
+
+    const today = new Date(); today.setHours(23,59,59,999);
+    const fourWeeksAgo = new Date(today); fourWeeksAgo.setDate(today.getDate() - 28); fourWeeksAgo.setHours(0,0,0,0);
+
+    const rows = aoa
+      .slice(1)
+      .filter(r => r.some(c => String(c).trim()!==""))
+      .map(r => ({ r, d: excelSerialToDate(r[di]) || new Date(r[di]) }))
+      .filter(x => x.d && !isNaN(x.d) && x.d >= fourWeeksAgo && x.d <= today)
+      .sort((a,b) => b.d - a.d)
+      .map(x => x.r);
+
+    if (rows.length === 0){
+      $("#bible-study-table").innerHTML = `<p class="dim">No Bible study items in the past 4 weeks.</p>`;
+      return;
+    }
+
+    const output = [headers, ...rows];
     renderTable(output, "#bible-study-table");
   }catch(e){
     $("#bible-study-table").innerHTML = `<p class="dim">Unable to load. Ensure <code>${PATHS.bibleStudy}</code> exists.</p>`;
@@ -220,7 +237,7 @@ async function getDatedFiles(){
   return items
     .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
     .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-    .sort((a,b)=> a.date - b.date);
+    .sort((a,b)=> a.date - b.date); // oldest -> newest
 }
 
 async function loadSetlists(){
@@ -305,7 +322,7 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- members ----
+// ---- members (flexible columns) ----
 async function loadMembers(){
   try{
     const wb = await fetchWB(PATHS.members);
@@ -314,6 +331,7 @@ async function loadMembers(){
       $("#members-table").textContent = "No members listed.";
       return;
     }
+
     const headers = aoa[0].map(h=>String(h));
     const preferred = ["Name","Role","Section","Instrument","Part","Phone","Email","Notes"];
     const lowerHeaders = headers.map(h=>h.toLowerCase());
@@ -339,7 +357,7 @@ async function buildAnalytics(dated, specialMeta){
     f => f.date && f.date.getFullYear() === currentYear
   );
 
-  const songCounts = new Map();
+  const songCounts = new Map();  // title -> plays
 
   async function accumulateFromWB(wb){
     const aoa = firstSheetAOA(wb);
@@ -379,7 +397,7 @@ async function buildAnalytics(dated, specialMeta){
     return;
   }
 
-  const entries = Array.from(songCounts.entries());
+  const entries = Array.from(songCounts.entries()); // [title, count]
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
   const top5 = entries.slice(0,5);
@@ -392,7 +410,7 @@ async function buildAnalytics(dated, specialMeta){
     .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
     .join("");
 
-  // Library
+  // Library (current year) — Song + Plays only
   const header = ["Song","Plays"];
   let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
   const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
@@ -403,6 +421,7 @@ async function buildAnalytics(dated, specialMeta){
   html += "</table>";
   $("#library-table").innerHTML = html;
 
+  // Charts
   renderCharts(entries);
 }
 
@@ -451,6 +470,54 @@ function renderCharts(entries){
   }
 }
 
+// ---- background music (muted by default; random track) ----
+function initMusic(){
+  const audio = $("#bg-audio");
+  const btnPlay = $("#music-toggle");
+  const btnMute = $("#music-mute");
+  const lbl = $("#music-track");
+
+  // Update with your filenames under /audio/
+  const playlist = [
+    // e.g. "contemporary1.mp3", "hymn1.mp3"
+    // Place files in /audio/ and uncomment/add entries:
+    // "contemporary1.mp3", "hymn1.mp3", "contemporary2.mp3"
+  ].map(name => `audio/${name}`);
+
+  if (!audio || !btnPlay || !btnMute || !lbl) return;
+  if (!playlist.length){
+    // Hide widget if no tracks provided
+    $("#music-ctl").style.display = "none";
+    return;
+  }
+
+  // Pick random track each visit
+  const pick = Math.floor(Math.random() * playlist.length);
+  const path = playlist[pick];
+  const fileName = path.split("/").pop();
+  lbl.textContent = `Music: ${fileName}`;
+
+  // Use raw GitHub URL
+  audio.src = rawURL(path);
+  audio.muted = true;           // start muted
+  audio.volume = 0.35;          // safe default if unmuted later
+  audio.play().catch(()=>{/* ignore autoplay rejections */});
+
+  // UI handlers
+  btnPlay.addEventListener("click", ()=>{
+    if (audio.paused){ audio.play().catch(()=>{}); btnPlay.textContent = "⏸"; }
+    else { audio.pause(); btnPlay.textContent = "►"; }
+  });
+  btnMute.addEventListener("click", ()=>{
+    audio.muted = !audio.muted;
+    btnMute.textContent = audio.muted ? "🔇" : "🔊";
+  });
+
+  // Start button state
+  btnPlay.textContent = audio.paused ? "►" : "⏸";
+  btnMute.textContent = audio.muted ? "🔇" : "🔊";
+}
+
 // ---- boot ----
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
@@ -459,6 +526,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     await loadBibleStudy();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
+    initMusic();
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
@@ -471,5 +539,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
     renderCharts([]);
+    initMusic();
   }
 });

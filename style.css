@@ -9,17 +9,34 @@ body{
   background:var(--bg); color:var(--text); line-height:1.55;
 }
 
-/* Header / nav */
+/* Header / nav with decorative music notes */
 .site-header{
-  position:sticky; top:0; z-index:10;
-  background:linear-gradient(180deg,#0b1022,rgba(11,16,34,.9));
+  position:sticky; top:0; z-index:10; overflow:hidden;
+  background:linear-gradient(180deg,#0b1022,rgba(11,16,34,.92));
   border-bottom:1px solid var(--border); backdrop-filter:blur(8px);
+}
+.site-header::after{
+  /* subtle repeating music symbols across the top bar */
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.08;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='60' viewBox='0 0 140 60'%3E%3Ctext x='12' y='38' font-size='28' fill='%23a78bfa'%3E%E2%99%AA%3C/text%3E%3Ctext x='70' y='28' font-size='22' fill='%23a78bfa'%3E%E2%99%AB%3C/text%3E%3C/svg%3E");
+  background-size:140px 60px; background-repeat:repeat;
 }
 .container{max-width:1180px;margin:0 auto;padding:1.1rem}
 .nav{display:flex;align-items:center;justify-content:space-between}
 .brand{font-weight:800;color:var(--text);text-decoration:none}
 nav a{color:var(--text);opacity:.92;margin-left:1rem;text-decoration:none}
 nav a:hover{color:var(--primary-2)}
+
+/* Cross icon (top-right) */
+.corner-cross{
+  position:absolute; top:10px; right:12px;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:36px; height:36px; border-radius:10px;
+  border:1px solid var(--border); background:rgba(167,139,250,.08);
+  text-decoration:none; transition:transform .15s ease, box-shadow .15s ease;
+}
+.corner-cross svg{fill:var(--primary-2)}
+.corner-cross:hover{transform:translateY(-1px) scale(1.03); box-shadow:0 4px 10px rgba(0,0,0,.25)}
 
 /* Sections */
 .section{padding:2rem 0}
@@ -34,6 +51,7 @@ nav a:hover{color:var(--primary-2)}
 .grid{display:grid;gap:1rem}
 .grid.two{grid-template-columns:1fr}
 @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
+
 .grid.three{grid-template-columns:1fr}
 @media(min-width:900px){.grid.three{grid-template-columns:2fr 1fr 1fr}}
 
@@ -64,6 +82,20 @@ th{background:#0e1530}
 }
 .reminder-label{font-weight:600}
 .reminder-time{opacity:.95}
+
+/* Music control (bottom-right) */
+.music-ctl{
+  position:fixed; right:14px; bottom:14px; z-index:20;
+  display:flex; align-items:center; gap:.5rem;
+  background:rgba(15,23,42,.8); backdrop-filter:blur(6px);
+  border:1px solid var(--border); border-radius:12px; padding:.4rem .6rem;
+}
+.music-btn{
+  background:#131c3a; border:1px solid var(--border); color:var(--text);
+  border-radius:8px; padding:.25rem .5rem; cursor:pointer; font-size:.95rem;
+}
+.music-btn:hover{background:#19244a}
+.music-track{color:var(--muted);max-width:40ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* Footer */
 .site-footer{border-top:1px solid var(--border)}

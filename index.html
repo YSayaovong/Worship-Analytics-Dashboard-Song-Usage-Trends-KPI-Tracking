@@ -9,6 +9,13 @@
 </head>
 <body>
   <header class="site-header">
+    <!-- Cross icon (top-right) -->
+    <a class="corner-cross" href="#top" aria-label="Cross">
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6z"/>
+      </svg>
+    </a>
+
     <div class="container nav">
       <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
       <nav>
@@ -65,7 +72,7 @@
       <div class="container">
         <h2 class="section-title">Bible Study</h2>
         <div id="bible-study-table" class="card">Loading Bible study…</div>
-        <p class="dim small">Source: <code>bible_study/bible_study.xlsx</code></p>
+        <p class="dim small">Source: <code>bible_study/bible_study.xlsx</code> — last 4 weeks only.</p>
       </div>
     </section>
 
@@ -125,6 +132,14 @@
       </div>
     </section>
   </main>
+
+  <!-- Background music control (optional) -->
+  <div id="music-ctl" class="music-ctl" aria-live="polite">
+    <button id="music-toggle" class="music-btn" title="Play/Pause">►</button>
+    <button id="music-mute" class="music-btn" title="Mute/Unmute">🔇</button>
+    <span id="music-track" class="music-track">Music: —</span>
+  </div>
+  <audio id="bg-audio" preload="auto" loop></audio>
 
   <footer class="site-footer">
     <div class="container">
