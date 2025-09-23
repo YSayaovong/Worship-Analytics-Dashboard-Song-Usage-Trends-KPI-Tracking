@@ -54,7 +54,7 @@ th{background:#0e1530}
 
 /* Playlist layout */
 .playlist{display:grid;gap:1rem;grid-template-columns:1fr}
-@media (min-width: 900px){.playlist{grid-template-columns:280px 1fr}}
+@media (min-width: 900px){.playlist{grid-template-columns:320px 1fr}}
 .playlist-list{list-style:none;margin:0;padding:0}
 .playlist-item{
   display:block;width:100%;text-align:left;

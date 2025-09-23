@@ -3,13 +3,9 @@
 
    Reads weekly content:
      • /setlist/setlist.xlsx           (preferred "This Coming Week")
-     • /setlists/YYYY-MM-DD.xlsx       (archive, also used for Last Week & analytics)
+     • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx
-
-   Weekly Excel (recommended headers on first sheet):
-     Song | Key | Notes | Link | CCLI | Sermon | YouTube | Date (optional)
-   Optional sheet "Meta":
-     Field | Value    e.g.,  Sermon | <text>   YouTube | <url>   Date | 2025-10-05
+     • /youtube/YouTube.xlsx           (media list; only latest week shown)
 */
 
 // ---- repo config ----
@@ -17,16 +13,9 @@ const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 const PATHS = {
   specialCurrent: "setlist/setlist.xlsx",
   setlistsDir: "setlists",
-  announcements: "announcements/announcements.xlsx"
+  announcements: "announcements/announcements.xlsx",
+  youtube: "youtube/YouTube.xlsx"
 };
-
-// ---- YouTube Playlist (edit/add items here) ----
-const PLAYLIST = [
-  {
-    title: "HFBC Practice #1",
-    url: "https://youtu.be/isTZCFsSUWo?si=5xaMSklXfmvi_wO7"
-  }
-];
 
 // ---- basic helpers ----
 const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
@@ -134,25 +123,10 @@ function renderSermon(targetSel, sermon){
   const el = $(targetSel);
   el.textContent = sermon ? `Sermon: ${sermon}` : "";
 }
-function renderYouTube(targetSel, url){
-  const el = $(targetSel);
-  el.innerHTML = "";
-  const id = extractYouTubeId(url);
-  if(!id){ el.textContent = "No video for this week."; return; }
-  const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
-  el.innerHTML = `
-    <iframe
-      src="${embed}"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowfullscreen
-    ></iframe>
-    <div class="small"><a href="${url}" target="_blank" rel="noopener">Open on YouTube</a></div>
-  `;
-}
 
-// ---- parse Meta/columns for Sermon/YouTube/Date ----
+// ---- parse Meta/columns for Sermon/Date ----
 function parseMeta(wb, aoa){
-  let sermon="", youtube="", serviceDate=null;
+  let sermon="", serviceDate=null;
 
   if(wb.Sheets["Meta"]){
     const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
@@ -160,7 +134,6 @@ function parseMeta(wb, aoa){
       const k = String(r[0]||"").toLowerCase();
       const v = r[1] || "";
       if(k==="sermon")  sermon = v || sermon;
-      if(k==="youtube") youtube = v || youtube;
       if(k==="date" || k==="servicedate" || k==="service date"){
         const d = excelSerialToDate(v) || new Date(v);
         if(!isNaN(d)) serviceDate = d;
@@ -170,17 +143,15 @@ function parseMeta(wb, aoa){
   if(aoa && aoa[0]){
     const hdr = aoa[0].map(h=>String(h).toLowerCase());
     const sIdx = hdr.indexOf("sermon");
-    const yIdx = hdr.indexOf("youtube");
     const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date")
                : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
     if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
-    if(!youtube && yIdx>=0) youtube = aoa[1]?.[yIdx] || "";
     if(!serviceDate && dIdx>=0){
       const d = excelSerialToDate(aoa[1]?.[dIdx]) || new Date(aoa[1]?.[dIdx]);
       if(!isNaN(d)) serviceDate = d;
     }
   }
-  return { sermon, youtube, serviceDate };
+  return { sermon, serviceDate };
 }
 
 // ---- announcements ----
@@ -239,12 +210,11 @@ async function loadSetlists(){
     try {
       const wb = await fetchWB(PATHS.specialCurrent);
       const aoa = firstSheetAOA(wb);
-      const { sermon, youtube, serviceDate } = parseMeta(wb, aoa);
+      const { sermon, serviceDate } = parseMeta(wb, aoa);
 
       $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
       renderTable(aoa, "#next-setlist");
       renderSermon("#next-sermon", sermon);
-      renderYouTube("#youtube-video", youtube);
       nextRendered = true;
 
       let last = null;
@@ -279,7 +249,6 @@ async function loadSetlists(){
       $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
       $("#last-date").textContent = "—";
       $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-      $("#youtube-video").textContent = "No video for this week.";
       return { dated, specialMeta };
     }
 
@@ -294,7 +263,6 @@ async function loadSetlists(){
     $("#next-date").textContent = niceDate(next.date);
     const meta = parseMeta(wb, aoa);
     renderSermon("#next-sermon", meta.sermon);
-    renderYouTube("#youtube-video", meta.youtube);
 
     const last = dated[nextIdx - 1] || (dated.length >= 2 ? dated[dated.length - 2] : null);
     if (last) {
@@ -313,10 +281,9 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- analytics (Current Year, auto after load) ----
+// ---- analytics (Current Year) ----
 async function buildAnalytics(dated, specialMeta){
   const currentYear = new Date().getFullYear();
-
   const datedThisYear = (dated || []).filter(
     f => f.date && f.date.getFullYear() === currentYear
   );
@@ -343,7 +310,6 @@ async function buildAnalytics(dated, specialMeta){
     }
   }
 
-  // Include special "current" setlist if no date or date in current year
   const includeSpecial =
     !!specialMeta && (
       !specialMeta.serviceDate ||
@@ -369,7 +335,7 @@ async function buildAnalytics(dated, specialMeta){
     return;
   }
 
-  const entries = Array.from(songCounts.entries()); // [title, count]
+  const entries = Array.from(songCounts.entries());
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
   const top5 = entries.slice(0,5);
@@ -395,43 +361,101 @@ async function buildAnalytics(dated, specialMeta){
   $("#library-table").innerHTML = html;
 }
 
-/* ---------- PLAYLIST UI ---------- */
-function renderPlaylist(){
-  const list = $("#playlist-list");
-  const player = $("#playlist-player");
-  if(!list || !player) return;
+/* ---------- YOUTUBE (latest week from youtube/YouTube.xlsx) ---------- */
+function weekRangeSunday(d){
+  const start = new Date(d); start.setHours(0,0,0,0);
+  start.setDate(start.getDate() - start.getDay()); // Sunday
+  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
+  return { start, end };
+}
 
-  if(!Array.isArray(PLAYLIST) || PLAYLIST.length === 0){
-    list.innerHTML = `<li class="dim">No playlist items yet.</li>`;
-    player.textContent = "Select a video to play.";
-    return;
-  }
+async function loadLatestWeekYouTube(){
+  try{
+    const wb = await fetchWB(PATHS.youtube);
+    const aoa = firstSheetAOA(wb);
+    if(!aoa || aoa.length <= 1){
+      $("#yt-week-range").textContent = "No videos found.";
+      $("#yt-list").innerHTML = `<li class="dim">Add rows to youtube/YouTube.xlsx</li>`;
+      return;
+    }
 
-  list.innerHTML = PLAYLIST.map((v, i) =>
-    `<li><button class="playlist-item" data-url="${encodeURIComponent(v.url)}">${i+1}. ${v.title || "Video"}</button></li>`
-  ).join("");
+    const headers = aoa[0].map(h => String(h));
+    // flexible header matching
+    const dateIdx = headers.findIndex(h => /date/i.test(h));
+    const urlIdx  = headers.findIndex(h => /(youtube|url|link|video)/i.test(h));
+    const titleIdx= headers.findIndex(h => /(title|name|desc(ription)?)/i.test(h));
 
-  list.querySelectorAll(".playlist-item").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      list.querySelectorAll(".playlist-item").forEach(b=>b.classList.remove("active"));
-      btn.classList.add("active");
-      const url = decodeURIComponent(btn.getAttribute("data-url"));
+    if (dateIdx === -1 || urlIdx === -1){
+      $("#yt-week-range").textContent = "Expected columns: Date, YouTube/URL.";
+      $("#yt-list").innerHTML = `<li class="dim">Add Date and YouTube columns.</li>`;
+      return;
+    }
+
+    const rows = aoa.slice(1).map((r,i)=>{
+      const d = excelSerialToDate(r[dateIdx]) || new Date(r[dateIdx]);
+      const url = (r[urlIdx] || "").toString().trim();
+      const title = (titleIdx>=0 ? r[titleIdx] : "") || "";
       const id = extractYouTubeId(url);
-      if(!id){
-        player.textContent = "Invalid YouTube link.";
-        return;
-      }
-      const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
-      player.innerHTML = `
-        <iframe
-          src="${embed}"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-        ></iframe>
-        <div class="small"><a href="${url}" target="_blank" rel="noopener">Open on YouTube</a></div>
-      `;
+      return { d: (!isNaN(d) ? d : null), url, id, title: title.toString().trim() };
+    }).filter(x => x.d && x.id);
+
+    if (rows.length === 0){
+      $("#yt-week-range").textContent = "No valid dated YouTube links.";
+      $("#yt-list").innerHTML = `<li class="dim">Ensure Date & valid YouTube URLs.</li>`;
+      return;
+    }
+
+    // find latest date, then compute its Sunday-week range
+    const latest = rows.reduce((a,b)=> a.d > b.d ? a : b).d;
+    const { start, end } = weekRangeSunday(latest);
+
+    const inWeek = rows.filter(x => x.d >= start && x.d <= end)
+                       .sort((a,b)=> a.d - b.d); // chronological
+
+    $("#yt-week-range").textContent = `${niceDate(start)} – ${niceDate(end)}`;
+
+    // render list
+    const list = $("#yt-list");
+    const player = $("#yt-player");
+    list.innerHTML = inWeek.map((v,i) =>
+      `<li><button class="playlist-item" data-url="${encodeURIComponent(v.url)}">
+         ${i+1}. ${v.title ? v.title : "YouTube"} — <span class="dim">${niceDate(v.d)}</span>
+       </button></li>`
+    ).join("");
+
+    // click to play (no autoplay)
+    list.querySelectorAll(".playlist-item").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        list.querySelectorAll(".playlist-item").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        const url = decodeURIComponent(btn.getAttribute("data-url"));
+        const id = extractYouTubeId(url);
+        if(!id){
+          player.textContent = "Invalid YouTube link.";
+          return;
+        }
+        const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
+        player.innerHTML = `
+          <iframe
+            src="${embed}"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+          <div class="small"><a href="${url}" target="_blank" rel="noopener">Open on YouTube</a></div>
+        `;
+      });
     });
-  });
+
+    if (inWeek.length === 0){
+      player.textContent = "No videos for the latest week.";
+    } else {
+      player.textContent = "Select a video to play.";
+    }
+  }catch(e){
+    console.error(e);
+    $("#yt-week-range").textContent = "Unable to load playlist.";
+    $("#yt-list").innerHTML = `<li class="dim">Ensure <code>${PATHS.youtube}</code> exists and has Date & YouTube columns.</li>`;
+  }
 }
 
 // ---- boot ----
@@ -440,16 +464,16 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     await loadAnnouncements();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
-    renderPlaylist();
+    await loadLatestWeekYouTube();
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
     $("#next-date").textContent = "—";
     $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
     $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-    $("#youtube-video").textContent = "—";
     $("#top5").innerHTML = `<li class="dim">No data.</li>`;
     $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
+    $("#yt-week-range").textContent = "Unable to load playlist.";
   }
 });
