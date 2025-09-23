@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hmong First Baptist Church — Praise & Worship</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="./">Hmong FBC — P&W</a>
+      <nav>
+        <a href="./archive.html">Setlist Archive</a>
+        <a href="./announcements.html">Announcements</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="grid">
+      <div class="card">
+        <h2>Next Service Setlist</h2>
+        <div id="latest-setlist">Loading latest setlist…</div>
+      </div>
+
+      <div class="card">
+        <h2>Latest Announcements</h2>
+        <div id="latest-announcements">Loading announcements…</div>
+        <p><a class="btn" href="./announcements.html">All announcements</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p class="dim">© <span id="year"></span> Hmong First Baptist Church • Praise & Worship Team</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="assets/js/script.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
