@@ -20,6 +20,14 @@ const PATHS = {
   announcements: "announcements/announcements.xlsx"
 };
 
+// ---- YouTube Playlist (edit/add items here) ----
+const PLAYLIST = [
+  {
+    title: "HFBC Practice #1",
+    url: "https://youtu.be/isTZCFsSUWo?si=5xaMSklXfmvi_wO7"
+  }
+];
+
 // ---- basic helpers ----
 const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
 const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
@@ -49,7 +57,7 @@ function toDateFromName(name){ // 2025-10-05.xlsx
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
 function niceDate(d){
-  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // e.g., "Sep 20, 2025"
+  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
 }
 
 // ---- Excel date + text helpers ----
@@ -131,7 +139,7 @@ function renderYouTube(targetSel, url){
   el.innerHTML = "";
   const id = extractYouTubeId(url);
   if(!id){ el.textContent = "No video for this week."; return; }
-  const embed = `https://www.youtube.com/embed/${id}`;
+  const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
   el.innerHTML = `
     <iframe
       src="${embed}"
@@ -335,9 +343,7 @@ async function buildAnalytics(dated, specialMeta){
     }
   }
 
-  // Include special "current" setlist if:
-  //  - it has a serviceDate in the current year, OR
-  //  - no date provided (assume current year to reflect newest songs)
+  // Include special "current" setlist if no date or date in current year
   const includeSpecial =
     !!specialMeta && (
       !specialMeta.serviceDate ||
@@ -389,12 +395,52 @@ async function buildAnalytics(dated, specialMeta){
   $("#library-table").innerHTML = html;
 }
 
+/* ---------- PLAYLIST UI ---------- */
+function renderPlaylist(){
+  const list = $("#playlist-list");
+  const player = $("#playlist-player");
+  if(!list || !player) return;
+
+  if(!Array.isArray(PLAYLIST) || PLAYLIST.length === 0){
+    list.innerHTML = `<li class="dim">No playlist items yet.</li>`;
+    player.textContent = "Select a video to play.";
+    return;
+  }
+
+  list.innerHTML = PLAYLIST.map((v, i) =>
+    `<li><button class="playlist-item" data-url="${encodeURIComponent(v.url)}">${i+1}. ${v.title || "Video"}</button></li>`
+  ).join("");
+
+  list.querySelectorAll(".playlist-item").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      list.querySelectorAll(".playlist-item").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      const url = decodeURIComponent(btn.getAttribute("data-url"));
+      const id = extractYouTubeId(url);
+      if(!id){
+        player.textContent = "Invalid YouTube link.";
+        return;
+      }
+      const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
+      player.innerHTML = `
+        <iframe
+          src="${embed}"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+        <div class="small"><a href="${url}" target="_blank" rel="noopener">Open on YouTube</a></div>
+      `;
+    });
+  });
+}
+
 // ---- boot ----
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
+    renderPlaylist();
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
