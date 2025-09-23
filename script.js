@@ -5,7 +5,6 @@
      • /setlist/setlist.xlsx           (preferred "This Coming Week")
      • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx
-     • /youtube/YouTube.xlsx           (media list; only latest week shown)
 */
 
 // ---- repo config ----
@@ -13,8 +12,7 @@ const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 const PATHS = {
   specialCurrent: "setlist/setlist.xlsx",
   setlistsDir: "setlists",
-  announcements: "announcements/announcements.xlsx",
-  youtube: "youtube/YouTube.xlsx"
+  announcements: "announcements/announcements.xlsx"
 };
 
 // ---- basic helpers ----
@@ -71,23 +69,6 @@ function normalizeAnnouncementText(s){
   out = out.replace(/:(?=\d)/g, ": "); // add space after ":" before a digit
   out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2"); // word then date
   return out.trim();
-}
-function extractYouTubeId(url){
-  try{
-    if(!url) return "";
-    const u = new URL(url);
-    if (u.hostname.includes("youtube.com")) {
-      if (u.pathname.startsWith("/watch")) return u.searchParams.get("v") || "";
-      if (u.pathname.startsWith("/embed/")) return u.pathname.split("/embed/")[1].split(/[?&#]/)[0] || "";
-      if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/shorts/")[1].split(/[?&#]/)[0] || "";
-    }
-    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split(/[?&#]/)[0] || "";
-  }catch{}
-  if (url.includes("watch?v=")) return url.split("watch?v=")[1].split("&")[0];
-  if (url.includes("youtu.be/")) return url.split("youtu.be/")[1].split(/[?&#]/)[0];
-  if (url.includes("/embed/"))  return url.split("/embed/")[1].split(/[?&#]/)[0];
-  if (url.includes("/shorts/")) return url.split("/shorts/")[1].split(/[?&#]/)[0];
-  return "";
 }
 
 // ---- smart table renderer (formats DATE columns) ----
@@ -310,6 +291,9 @@ async function buildAnalytics(dated, specialMeta){
     }
   }
 
+  // Include special "current" setlist if:
+  //  - it has a serviceDate in the current year, OR
+  //  - no date provided (assume current year to reflect newest songs)
   const includeSpecial =
     !!specialMeta && (
       !specialMeta.serviceDate ||
@@ -361,110 +345,12 @@ async function buildAnalytics(dated, specialMeta){
   $("#library-table").innerHTML = html;
 }
 
-/* ---------- YOUTUBE (latest week from youtube/YouTube.xlsx) ---------- */
-function weekRangeSunday(d){
-  const start = new Date(d); start.setHours(0,0,0,0);
-  start.setDate(start.getDate() - start.getDay()); // Sunday
-  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
-  return { start, end };
-}
-
-async function loadLatestWeekYouTube(){
-  try{
-    const wb = await fetchWB(PATHS.youtube);
-    const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length <= 1){
-      $("#yt-week-range").textContent = "No videos found.";
-      $("#yt-list").innerHTML = `<li class="dim">Add rows to youtube/YouTube.xlsx</li>`;
-      return;
-    }
-
-    const headers = aoa[0].map(h => String(h));
-    // flexible header matching
-    const dateIdx = headers.findIndex(h => /date/i.test(h));
-    const urlIdx  = headers.findIndex(h => /(youtube|url|link|video)/i.test(h));
-    const titleIdx= headers.findIndex(h => /(title|name|desc(ription)?)/i.test(h));
-
-    if (dateIdx === -1 || urlIdx === -1){
-      $("#yt-week-range").textContent = "Expected columns: Date, YouTube/URL.";
-      $("#yt-list").innerHTML = `<li class="dim">Add Date and YouTube columns.</li>`;
-      return;
-    }
-
-    const rows = aoa.slice(1).map((r,i)=>{
-      const d = excelSerialToDate(r[dateIdx]) || new Date(r[dateIdx]);
-      const url = (r[urlIdx] || "").toString().trim();
-      const title = (titleIdx>=0 ? r[titleIdx] : "") || "";
-      const id = extractYouTubeId(url);
-      return { d: (!isNaN(d) ? d : null), url, id, title: title.toString().trim() };
-    }).filter(x => x.d && x.id);
-
-    if (rows.length === 0){
-      $("#yt-week-range").textContent = "No valid dated YouTube links.";
-      $("#yt-list").innerHTML = `<li class="dim">Ensure Date & valid YouTube URLs.</li>`;
-      return;
-    }
-
-    // find latest date, then compute its Sunday-week range
-    const latest = rows.reduce((a,b)=> a.d > b.d ? a : b).d;
-    const { start, end } = weekRangeSunday(latest);
-
-    const inWeek = rows.filter(x => x.d >= start && x.d <= end)
-                       .sort((a,b)=> a.d - b.d); // chronological
-
-    $("#yt-week-range").textContent = `${niceDate(start)} – ${niceDate(end)}`;
-
-    // render list
-    const list = $("#yt-list");
-    const player = $("#yt-player");
-    list.innerHTML = inWeek.map((v,i) =>
-      `<li><button class="playlist-item" data-url="${encodeURIComponent(v.url)}">
-         ${i+1}. ${v.title ? v.title : "YouTube"} — <span class="dim">${niceDate(v.d)}</span>
-       </button></li>`
-    ).join("");
-
-    // click to play (no autoplay)
-    list.querySelectorAll(".playlist-item").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        list.querySelectorAll(".playlist-item").forEach(b=>b.classList.remove("active"));
-        btn.classList.add("active");
-        const url = decodeURIComponent(btn.getAttribute("data-url"));
-        const id = extractYouTubeId(url);
-        if(!id){
-          player.textContent = "Invalid YouTube link.";
-          return;
-        }
-        const embed = `https://www.youtube.com/embed/${id}?autoplay=0`;
-        player.innerHTML = `
-          <iframe
-            src="${embed}"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen
-          ></iframe>
-          <div class="small"><a href="${url}" target="_blank" rel="noopener">Open on YouTube</a></div>
-        `;
-      });
-    });
-
-    if (inWeek.length === 0){
-      player.textContent = "No videos for the latest week.";
-    } else {
-      player.textContent = "Select a video to play.";
-    }
-  }catch(e){
-    console.error(e);
-    $("#yt-week-range").textContent = "Unable to load playlist.";
-    $("#yt-list").innerHTML = `<li class="dim">Ensure <code>${PATHS.youtube}</code> exists and has Date & YouTube columns.</li>`;
-  }
-}
-
 // ---- boot ----
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
-    await loadLatestWeekYouTube();
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
@@ -474,6 +360,5 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     $("#top5").innerHTML = `<li class="dim">No data.</li>`;
     $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
     $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
-    $("#yt-week-range").textContent = "Unable to load playlist.";
   }
 });
