@@ -34,7 +34,6 @@ nav a:hover{color:var(--primary-2)}
 .grid{display:grid;gap:1rem}
 .grid.two{grid-template-columns:1fr}
 @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
-
 .grid.three{grid-template-columns:1fr}
 @media(min-width:900px){.grid.three{grid-template-columns:2fr 1fr 1fr}}
 

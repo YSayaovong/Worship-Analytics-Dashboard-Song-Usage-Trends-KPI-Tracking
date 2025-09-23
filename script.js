@@ -6,6 +6,7 @@
      • /setlists/YYYY-MM-DD.xlsx          (archive, used for Last Week & analytics)
      • /announcements/announcements.xlsx  (hide >31 days)
      • /members/members.xlsx              (team roster)
+     • /bible_study/bible_study.xlsx      (Bible Study)
 
    Analytics: current calendar year only; Song + Plays (no keys).
    Charts: Bar + Pie via Chart.js.
@@ -17,7 +18,8 @@ const PATHS = {
   specialCurrent: "setlist/setlist.xlsx",
   setlistsDir: "setlists",
   announcements: "announcements/announcements.xlsx",
-  members: "members/members.xlsx"
+  members: "members/members.xlsx",
+  bibleStudy: "bible_study/bible_study.xlsx"
 };
 
 // ---- basic helpers ----
@@ -49,13 +51,7 @@ function toDateFromName(name){
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
 function niceDate(d){
-  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
-}
-function weekRangeSunday(d){
-  const start = new Date(d); start.setHours(0,0,0,0);
-  start.setDate(start.getDate() - start.getDay()); // Sunday
-  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
-  return { start, end };
+  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" });
 }
 
 // ---- Excel helpers ----
@@ -186,13 +182,45 @@ async function loadAnnouncements(){
   }
 }
 
+// ---- Bible Study ----
+async function loadBibleStudy(){
+  try{
+    const wb = await fetchWB(PATHS.bibleStudy);
+    const aoa = firstSheetAOA(wb);
+    if(!aoa || aoa.length === 0){
+      $("#bible-study-table").textContent = "No Bible study items.";
+      return;
+    }
+    const headers = aoa[0].map(h => String(h));
+    const di = headers.findIndex(h => /date/i.test(h));
+    let output = aoa;
+    if (di !== -1){
+      const rows = aoa
+        .slice(1)
+        .filter(r => r.some(c => String(c).trim()!==""))
+        .map(r => ({ r, d: excelSerialToDate(r[di]) || new Date(r[di]) }))
+        .sort((a,b) => {
+          if (a.d && b.d) return a.d - b.d;
+          if (a.d) return -1;
+          if (b.d) return 1;
+          return 0;
+        })
+        .map(x => x.r);
+      output = [headers, ...rows];
+    }
+    renderTable(output, "#bible-study-table");
+  }catch(e){
+    $("#bible-study-table").innerHTML = `<p class="dim">Unable to load. Ensure <code>${PATHS.bibleStudy}</code> exists.</p>`;
+  }
+}
+
 // ---- setlists (This Coming Week & Last Week) ----
 async function getDatedFiles(){
   const items = await listDir(PATHS.setlistsDir);
   return items
     .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
     .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-    .sort((a,b)=> a.date - b.date); // oldest -> newest
+    .sort((a,b)=> a.date - b.date);
 }
 
 async function loadSetlists(){
@@ -277,7 +305,7 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---- members (flexible columns) ----
+// ---- members ----
 async function loadMembers(){
   try{
     const wb = await fetchWB(PATHS.members);
@@ -286,8 +314,6 @@ async function loadMembers(){
       $("#members-table").textContent = "No members listed.";
       return;
     }
-
-    // Prefer common columns ordering if present
     const headers = aoa[0].map(h=>String(h));
     const preferred = ["Name","Role","Section","Instrument","Part","Phone","Email","Notes"];
     const lowerHeaders = headers.map(h=>h.toLowerCase());
@@ -300,7 +326,6 @@ async function loadMembers(){
     headers.forEach((_,i)=>{ if(!orderIdx.includes(i)) orderIdx.push(i); });
 
     const ordered = aoa.map(row => orderIdx.map(i => row[i] ?? ""));
-
     renderTable(ordered, "#members-table");
   }catch(e){
     $("#members-table").innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
@@ -314,7 +339,7 @@ async function buildAnalytics(dated, specialMeta){
     f => f.date && f.date.getFullYear() === currentYear
   );
 
-  const songCounts = new Map();  // title -> plays
+  const songCounts = new Map();
 
   async function accumulateFromWB(wb){
     const aoa = firstSheetAOA(wb);
@@ -354,7 +379,7 @@ async function buildAnalytics(dated, specialMeta){
     return;
   }
 
-  const entries = Array.from(songCounts.entries()); // [title, count]
+  const entries = Array.from(songCounts.entries());
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
   const top5 = entries.slice(0,5);
@@ -367,7 +392,7 @@ async function buildAnalytics(dated, specialMeta){
     .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
     .join("");
 
-  // Library (current year) — Song + Plays only
+  // Library
   const header = ["Song","Plays"];
   let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
   const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
@@ -378,7 +403,6 @@ async function buildAnalytics(dated, specialMeta){
   html += "</table>";
   $("#library-table").innerHTML = html;
 
-  // Charts
   renderCharts(entries);
 }
 
@@ -432,12 +456,14 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
     await loadMembers();
+    await loadBibleStudy();
     const { dated, specialMeta } = await loadSetlists();
     await buildAnalytics(dated, specialMeta);
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
     $("#members-table").innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
+    $("#bible-study-table").innerHTML = `<p class="dim">Unable to load Bible study. Ensure <code>${PATHS.bibleStudy}</code> exists.</p>`;
     $("#next-date").textContent = "—";
     $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
     $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
