@@ -7,9 +7,8 @@
   <meta name="color-scheme" content="dark light" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body data-page="home">
   <header class="site-header">
-    <!-- Cross icon (top-right) -->
     <a class="corner-cross" href="#top" aria-label="Cross">
       <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
         <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6z"/>
@@ -17,13 +16,12 @@
     </a>
 
     <div class="container nav">
-      <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
+      <a class="brand" href="index.html">Hmong First Baptist Church – Praise & Worship</a>
       <nav>
-        <a href="#announcements">Announcements</a>
-        <a href="#members">Members</a>
-        <a href="#bible-study">Bible Study</a>
-        <a href="#setlists">Setlists</a>
-        <a href="#analytics">Song Analytics</a>
+        <a href="index.html">Home</a>
+        <a href="reporting.html">Reporting</a>
+        <a href="library.html">Library</a>
+        <a href="hymnal.html">Hymnal</a>
       </nav>
     </div>
   </header>
@@ -75,71 +73,7 @@
         <p class="dim small">Source: <code>bible_study/bible_study.xlsx</code> — last 4 weeks only.</p>
       </div>
     </section>
-
-    <!-- Setlists -->
-    <section id="setlists" class="section alt">
-      <div class="container">
-        <h2 class="section-title">Setlists</h2>
-        <div class="grid two">
-          <article class="card">
-            <h3>This Coming Week</h3>
-            <p id="next-date" class="meta">Detecting next service…</p>
-            <div id="next-sermon" class="meta"></div>
-            <div id="next-setlist">Please wait…</div>
-          </article>
-
-          <article class="card">
-            <h3>Last Week</h3>
-            <p id="last-date" class="meta">—</p>
-            <div id="last-sermon" class="meta"></div>
-            <div id="last-setlist">Please wait…</div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- Song analytics & library -->
-    <section id="analytics" class="section alt">
-      <div class="container">
-        <h2 class="section-title">Song Analytics</h2>
-        <div class="grid two">
-          <article class="card">
-            <h3>Top 5 – Most Popular</h3>
-            <ol id="top5" class="ranked"><li class="dim">No data yet.</li></ol>
-          </article>
-          <article class="card">
-            <h3>Top 5 – Least Popular</h3>
-            <ol id="bottom5" class="ranked"><li class="dim">No data yet.</li></ol>
-          </article>
-        </div>
-
-        <div class="grid two charts">
-          <article class="card">
-            <h3>Top Songs (Bar)</h3>
-            <div class="chart-wrap"><canvas id="barChart"></canvas></div>
-          </article>
-          <article class="card">
-            <h3>Top Songs (Pie)</h3>
-            <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
-          </article>
-        </div>
-
-        <div class="card">
-          <h3>Song Library (Current Year)</h3>
-          <p class="dim small">Unique songs and play counts this year.</p>
-          <div id="library-table">Building library…</div>
-        </div>
-      </div>
-    </section>
   </main>
-
-  <!-- Background music control (optional) -->
-  <div id="music-ctl" class="music-ctl" aria-live="polite">
-    <button id="music-toggle" class="music-btn" title="Play/Pause">►</button>
-    <button id="music-mute" class="music-btn" title="Mute/Unmute">🔇</button>
-    <span id="music-track" class="music-track">Music: —</span>
-  </div>
-  <audio id="bg-audio" preload="auto" loop></audio>
 
   <footer class="site-footer">
     <div class="container">
@@ -147,7 +81,6 @@
     </div>
   </footer>
 
-  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="script.js"></script>

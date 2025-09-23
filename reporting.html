@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Reporting • HFBC – Praise & Worship</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="reporting">
+  <header class="site-header">
+    <a class="corner-cross" href="#top" aria-label="Cross">
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6z"/>
+      </svg>
+    </a>
+
+    <div class="container nav">
+      <a class="brand" href="index.html">Hmong First Baptist Church – Praise & Worship</a>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="reporting.html" aria-current="page">Reporting</a>
+        <a href="library.html">Library</a>
+        <a href="hymnal.html">Hymnal</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Weekly setlists with auto stories -->
+    <section id="setlists" class="section">
+      <div class="container">
+        <h2 class="section-title">Weekly Songs</h2>
+        <div class="grid two">
+          <article class="card">
+            <h3>This Coming Week</h3>
+            <p id="next-date" class="meta">Detecting next service…</p>
+            <div id="next-sermon" class="meta"></div>
+            <div id="next-setlist">Please wait…</div>
+          </article>
+
+          <article class="card">
+            <h3>Last Week</h3>
+            <p id="last-date" class="meta">—</p>
+            <div id="last-sermon" class="meta"></div>
+            <div id="last-setlist">Please wait…</div>
+          </article>
+        </div>
+        <p class="dim small">Stories are auto-fetched from Wikipedia when available; you can override by adding a <code>Story</code> column in your setlist files.</p>
+      </div>
+    </section>
+
+    <!-- Analytics + Library + CCLI -->
+    <section id="analytics" class="section alt">
+      <div class="container">
+        <h2 class="section-title">Song Analytics</h2>
+        <div class="grid two">
+          <article class="card">
+            <h3>Top 5 – Most Popular</h3>
+            <ol id="top5" class="ranked"><li class="dim">No data yet.</li></ol>
+          </article>
+          <article class="card">
+            <h3>Top 5 – Least Popular</h3>
+            <ol id="bottom5" class="ranked"><li class="dim">No data yet.</li></ol>
+          </article>
+        </div>
+
+        <div class="grid two charts">
+          <article class="card">
+            <h3>Top Songs (Bar)</h3>
+            <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+          </article>
+          <article class="card">
+            <h3>Top Songs (Pie)</h3>
+            <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+          </article>
+        </div>
+
+        <div class="card">
+          <h3>Song Library (Current Year)</h3>
+          <p class="dim small">“Status” is inferred. Add <code>CCLI</code>, <code>PublicDomain</code>, or <code>Year</code> columns in your sheets to improve accuracy.</p>
+          <div id="library-table">Building library…</div>
+        </div>
+
+        <div class="card">
+          <div class="flex-row">
+            <h3>CCLI Reporting</h3>
+            <button id="export-csv" class="btn">Export CSV</button>
+          </div>
+          <div class="grid two">
+            <div>
+              <h4>Report to CCLI</h4>
+              <div id="ccli-report">—</div>
+            </div>
+            <div>
+              <h4>Public Domain / No Reporting</h4>
+              <div id="ccli-pd">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p class="dim">© <span id="year"></span> Hmong First Baptist Church • Praise & Worship Team</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
