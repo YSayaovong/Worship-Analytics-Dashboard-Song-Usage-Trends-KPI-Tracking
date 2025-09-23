@@ -52,5 +52,18 @@ th{background:#0e1530}
 .youtube{margin-top:.5rem}
 .youtube iframe{width:100%;max-width:760px;aspect-ratio:16/9;border:0;border-radius:10px}
 
+/* Playlist layout */
+.playlist{display:grid;gap:1rem;grid-template-columns:1fr}
+@media (min-width: 900px){.playlist{grid-template-columns:280px 1fr}}
+.playlist-list{list-style:none;margin:0;padding:0}
+.playlist-item{
+  display:block;width:100%;text-align:left;
+  background:#111a33;border:1px solid var(--border);
+  color:var(--text);padding:.55rem .65rem;border-radius:10px;
+  cursor:pointer;margin-bottom:.45rem;
+}
+.playlist-item:hover{border-color:var(--primary-2)}
+.playlist-item.active{outline:2px solid var(--primary)}
+
 /* Footer */
 .site-footer{border-top:1px solid var(--border)}
