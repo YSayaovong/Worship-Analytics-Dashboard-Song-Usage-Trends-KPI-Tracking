@@ -1,212 +1,123 @@
-/* ===== Hmong FBC P&W — Static Frontend with Excel ingestion =====
- * - Lists weekly Excel setlists from the GitHub repo via GitHub API
- * - Renders latest setlist on Home
- * - Renders archive and any specific setlist by query string
- * - Renders announcements from announcements.xlsx
- * --------------------------------------------------------------- */
+/* Hmong First Baptist Church – Praise & Worship
+   Static site: auto-loads Excel setlists from GitHub and shows latest + archive.
+   Adds YouTube embed if present in the Excel file.
+*/
 
-/** >>>> CONFIG: set these to your repo details <<<< */
+// >>> CONFIG: set your repo info <<<
 const GH = {
-  owner: "YSayaovong",             // <-- your GitHub username/org
-  repo:  "hfb-pw-site",            // <-- your repository name
-  branch:"main"                    // <-- branch hosting Pages
+  owner: "YSayaovong",   // GitHub username
+  repo: "hfb-pw-site",   // Repository name
+  branch: "main"         // Branch with Pages
 };
+const SETLIST_DIR = "setlists";
 
-const PATHS = {
-  setlists: "setlists",            // folder with weekly .xlsx files named YYYY-MM-DD.xlsx
-  announcements: "announcements/announcements.xlsx" // single Excel file for announcements
-};
-
-/** Utility: GitHub API & Raw URLs */
+// --- GitHub helpers ---
 const ghApiUrl = (path) =>
-  `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(GH.branch)}`;
-
+  `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}?ref=${GH.branch}`;
 const ghRawUrl = (path) =>
   `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${path}`;
 
-/** List directory contents via GitHub API (returns array of file objects) */
-async function listDirectory(path) {
-  const res = await fetch(ghApiUrl(path), { headers: { "Accept": "application/vnd.github+json" } });
-  if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
-  return res.json();
-}
-
-/** Fetch an Excel file from raw.githubusercontent.com, parse to workbook */
-async function fetchWorkbook(rawPath) {
-  const res = await fetch(ghRawUrl(rawPath));
-  if (!res.ok) throw new Error(`Fetch error for ${rawPath}: ${res.status} ${res.statusText}`);
+// --- Excel helpers ---
+async function fetchWorkbook(path) {
+  const res = await fetch(ghRawUrl(path));
   const ab = await res.arrayBuffer();
   return XLSX.read(ab, { type: "array" });
 }
-
-/** Convert first sheet to array-of-arrays */
-function firstSheetToAOA(workbook) {
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+function firstSheetToAOA(wb) {
+  const sheet = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 }
 
-/** Render a simple table to a target element */
-function renderTable(aoa, targetId, caption) {
-  const el = document.getElementById(targetId);
-  if (!el) return;
-  if (!aoa || aoa.length === 0) { el.textContent = "No data found."; return; }
-
-  let html = "<div class='table-wrap'>";
-  if (caption) html += `<p class="meta">${caption}</p>`;
-  html += "<table>";
+// --- Render helpers ---
+function renderTable(aoa, target) {
+  if (!aoa || aoa.length === 0) {
+    target.textContent = "No data.";
+    return;
+  }
+  let html = "<table>";
   aoa.forEach((row, i) => {
     html += "<tr>";
     row.forEach(cell => {
-      const safe = String(cell);
-      html += (i === 0) ? `<th>${safe}</th>` : `<td>${safe}</td>`;
+      html += i === 0 ? `<th>${cell}</th>` : `<td>${cell}</td>`;
     });
     html += "</tr>";
   });
-  html += "</table></div>";
-  el.innerHTML = html;
+  html += "</table>";
+  target.innerHTML = html;
+}
+function embedYouTube(url) {
+  const ytDiv = document.getElementById("youtube-video");
+  ytDiv.innerHTML = "";
+  if (!url) return;
+  const videoId = url.split("v=")[1]?.split("&")[0] || url.split("/").pop();
+  if (!videoId) return;
+  ytDiv.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
 }
 
-/** Format YYYY-MM-DD to friendly date */
-function friendlyDateFromFilename(name) {
-  // name like 2025-10-05.xlsx
-  const m = name.match(/^(\d{4})-(\d{2})-(\d{2})\.xlsx$/);
-  if (!m) return name;
-  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
-  return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-}
-
-/** Compare by date embedded in filename */
-function compareSetlistNamesDesc(a, b) {
-  const da = a.replace(".xlsx",""), db = b.replace(".xlsx","");
-  return db.localeCompare(da); // YYYY-MM-DD sorts correctly as strings
-}
-
-/** Extract list of setlist filenames matching YYYY-MM-DD.xlsx */
-async function getSetlistFiles() {
-  const items = await listDirectory(PATHS.setlists);
-  return items
-    .filter(it => it.type === "file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name))
-    .map(it => it.name)
-    .sort(compareSetlistNamesDesc); // newest first
-}
-
-/** Home: render latest setlist + latest announcements */
-async function renderHome() {
+// --- Main ---
+async function init() {
   try {
-    // Latest setlist
-    const files = await getSetlistFiles();
+    // list setlist files
+    const res = await fetch(ghApiUrl(SETLIST_DIR));
+    const items = await res.json();
+    const files = items
+      .filter(f => f.type === "file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(f.name))
+      .map(f => f.name)
+      .sort((a,b) => b.localeCompare(a)); // newest first
+
     if (files.length === 0) {
       document.getElementById("latest-setlist").textContent = "No setlists found.";
-    } else {
-      const latest = files[0];
-      const wb = await fetchWorkbook(`${PATHS.setlists}/${latest}`);
-      const aoa = firstSheetToAOA(wb);
-      const caption = `${friendlyDateFromFilename(latest)} • (${latest})`;
-      renderTable(aoa, "latest-setlist", caption);
-    }
-
-    // Announcements (limit 5 rows after header)
-    await renderAnnouncements("latest-announcements", 5);
-  } catch (err) {
-    console.error(err);
-    const el = document.getElementById("latest-setlist");
-    if (el) el.textContent = "Error loading latest setlist.";
-    const an = document.getElementById("latest-announcements");
-    if (an) an.textContent = "Error loading announcements.";
-  }
-}
-
-/** Archive: list all setlists with links to setlist.html?file=... */
-async function renderArchive() {
-  try {
-    const ul = document.getElementById("archive-list");
-    if (!ul) return;
-
-    const files = await getSetlistFiles();
-    if (files.length === 0) {
-      ul.innerHTML = "<li>No setlists found.</li>";
       return;
     }
 
-    ul.innerHTML = files.map(name => {
-      const nice = friendlyDateFromFilename(name);
-      const href = `./setlist.html?file=${encodeURIComponent(name)}`;
-      return `<li><a href="${href}">${nice}</a> <span class="dim">(${name})</span></li>`;
+    // Latest
+    const latest = files[0];
+    const wb = await fetchWorkbook(`${SETLIST_DIR}/${latest}`);
+    const aoa = firstSheetToAOA(wb);
+    renderTable(aoa, document.getElementById("latest-setlist"));
+
+    // Try YouTube
+    let ytUrl = "";
+    if (wb.Sheets["Meta"]) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header: 1, defval: "" });
+      const ytRow = rows.find(r => r[0]?.toLowerCase() === "youtube");
+      ytUrl = ytRow ? ytRow[1] : "";
+    } else if (aoa[0].includes("YouTube")) {
+      const col = aoa[0].indexOf("YouTube");
+      ytUrl = aoa[1]?.[col] || "";
+    }
+    embedYouTube(ytUrl);
+
+    // Archive
+    const list = document.getElementById("archive-list");
+    list.innerHTML = files.map(f => {
+      const nice = f.replace(".xlsx", "");
+      return `<li><a href="#" onclick="loadSetlist('${f}')">${nice}</a></li>`;
     }).join("");
   } catch (err) {
     console.error(err);
-    const ul = document.getElementById("archive-list");
-    if (ul) ul.innerHTML = "<li>Error loading archive.</li>";
+    document.getElementById("latest-setlist").textContent = "Error loading setlist.";
   }
 }
 
-/** Setlist page: render by ?file=YYYY-MM-DD.xlsx */
-async function renderSetlistFromQuery() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const file = params.get("file");
-    const titleEl = document.getElementById("setlist-title");
-    if (!file || !/^\d{4}-\d{2}-\d{2}\.xlsx$/.test(file)) {
-      document.getElementById("setlist-view").textContent = "Invalid or missing setlist file.";
-      if (titleEl) titleEl.textContent = "Setlist";
-      return;
-    }
-    if (titleEl) titleEl.textContent = `Setlist — ${friendlyDateFromFilename(file)}`;
+// load from archive link
+async function loadSetlist(file) {
+  const wb = await fetchWorkbook(`${SETLIST_DIR}/${file}`);
+  const aoa = firstSheetToAOA(wb);
+  renderTable(aoa, document.getElementById("latest-setlist"));
 
-    const wb = await fetchWorkbook(`${PATHS.setlists}/${file}`);
-    const aoa = firstSheetToAOA(wb);
-    renderTable(aoa, "setlist-view", `(${file})`);
-  } catch (err) {
-    console.error(err);
-    const el = document.getElementById("setlist-view");
-    if (el) el.textContent = "Error loading setlist.";
+  // YouTube again
+  let ytUrl = "";
+  if (wb.Sheets["Meta"]) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header: 1, defval: "" });
+    const ytRow = rows.find(r => r[0]?.toLowerCase() === "youtube");
+    ytUrl = ytRow ? ytRow[1] : "";
+  } else if (aoa[0].includes("YouTube")) {
+    const col = aoa[0].indexOf("YouTube");
+    ytUrl = aoa[1]?.[col] || "";
   }
+  embedYouTube(ytUrl);
+  window.location.hash = "#home";
 }
 
-/** Announcements: read a single Excel file and render (optional limit) */
-async function renderAnnouncements(targetId, limit = null) {
-  try {
-    const wb = await fetchWorkbook(PATHS.announcements);
-    const aoa = firstSheetToAOA(wb);
-    if (!aoa || aoa.length === 0) {
-      document.getElementById(targetId).textContent = "No announcements.";
-      return;
-    }
-
-    // Expect first row to be headers (e.g., Date | Title | Details)
-    let rows = aoa.slice(1); // skip header for limiting/sorting
-    // Try to sort by Date desc if first column looks like a date
-    rows.sort((a, b) => {
-      const da = new Date(a[0]); const db = new Date(b[0]);
-      return db - da;
-    });
-
-    if (limit) rows = rows.slice(0, limit);
-    const table = [aoa[0], ...rows]; // reattach header
-    renderTable(table, targetId);
-  } catch (err) {
-    console.error(err);
-    const el = document.getElementById(targetId);
-    if (el) el.textContent = "Error loading announcements.";
-  }
-}
-
-/** Announcements page: full render */
-async function renderAnnouncementsPage() {
-  await renderAnnouncements("announcements-table", null);
-}
-
-/** Expose public API for inline scripts */
-window.HFBPW = {
-  renderHome,
-  renderArchive,
-  renderSetlistFromQuery,
-  renderAnnouncementsPage
-};
-
-/** Auto-run Home when index.html loads (exists check prevents errors on other pages) */
-document.addEventListener("DOMContentLoaded", () => {
-  if (document.getElementById("latest-setlist")) {
-    HFBPW.renderHome();
-  }
-});
+document.addEventListener("DOMContentLoaded", init);
