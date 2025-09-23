@@ -1,26 +1,26 @@
 /* Hmong First Baptist Church – Praise & Worship
-   Fixes:
-   - Announcements: Excel serial dates -> readable dates + spacing before dates.
-   - YouTube: robust embed and "Open on YouTube" link.
+   Static site (no backend) powered by Excel files on GitHub.
 
-   Assumes the rest of your file is unchanged (setlists, analytics, etc.).
-   If you previously used this file from me, this is a full replacement.
+   Reads weekly content:
+     • /setlist/setlist.xlsx           (preferred "This Coming Week")
+     • /setlists/YYYY-MM-DD.xlsx       (archive, also used for Last Week & analytics)
+     • /announcements/announcements.xlsx
+
+   Weekly Excel (recommended headers on first sheet):
+     Song | Key | Notes | Link | CCLI | Sermon | YouTube | Date (optional)
+   Optional sheet "Meta":
+     Field | Value    e.g.,  Sermon | <text>   YouTube | <url>   Date | 2025-10-05
 */
 
-// >>>>>> EDIT REPO INFO <<<<<
-const GH = {
-  owner: "YSayaovong",
-  repo:  "HFBC_Praise_Worship",
-  branch:"main"
-};
-
+// ---- repo config ----
+const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 const PATHS = {
-  specialCurrent: "setlist/setlist.xlsx",          // optional, preferred for "This Coming Week"
-  setlistsDir:    "setlists",                      // dated archive files
-  announcements:  "announcements/announcements.xlsx"
+  specialCurrent: "setlist/setlist.xlsx",
+  setlistsDir: "setlists",
+  announcements: "announcements/announcements.xlsx"
 };
 
-// ---------- helpers ----------
+// ---- basic helpers ----
 const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
 const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
 const $ = (s) => document.querySelector(s);
@@ -49,15 +49,11 @@ function toDateFromName(name){ // 2025-10-05.xlsx
   return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
 }
 function niceDate(d){
-  return d.toLocaleDateString(undefined,{ year:"numeric", month:"short", day:"numeric" });
-}
-function fullNiceDate(d){
-  return d.toLocaleDateString(undefined,{ weekday:"long", year:"numeric", month:"long", day:"numeric" });
+  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // e.g., "Sep 20, 2025"
 }
 
-/* ---------- Date + text formatting for announcements ---------- */
+// ---- Excel date + text helpers ----
 function excelSerialToDate(val){
-  // Prefer SheetJS decoder when possible
   if (typeof val === "number") {
     const o = XLSX.SSF.parse_date_code(val);
     if (o) return new Date(o.y, o.m - 1, o.d);
@@ -73,17 +69,12 @@ function excelSerialToDate(val){
   }
   return null;
 }
-
 function normalizeAnnouncementText(s){
-  // Ensure a space after ":" if followed by a digit (e.g., ":09/23/2025" -> ": 09/23/2025")
   let out = String(s ?? "");
-  out = out.replace(/:(?=\d)/g, ": ");
-  // Also add a space when letters are immediately followed by a date like 09/23/2025
-  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2");
+  out = out.replace(/:(?=\d)/g, ": "); // add space after ":" before a digit
+  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2"); // word then date
   return out.trim();
 }
-
-/* ---------- YouTube ---------- */
 function extractYouTubeId(url){
   try{
     if(!url) return "";
@@ -93,25 +84,53 @@ function extractYouTubeId(url){
       if (u.pathname.startsWith("/embed/")) return u.pathname.split("/embed/")[1].split(/[?&#]/)[0] || "";
       if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/shorts/")[1].split(/[?&#]/)[0] || "";
     }
-    if (u.hostname.includes("youtu.be")) {
-      return u.pathname.slice(1).split(/[?&#]/)[0] || "";
-    }
-  }catch{ /* fall through */ }
-  // Fallback for plain strings
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split(/[?&#]/)[0] || "";
+  }catch{}
   if (url.includes("watch?v=")) return url.split("watch?v=")[1].split("&")[0];
   if (url.includes("youtu.be/")) return url.split("youtu.be/")[1].split(/[?&#]/)[0];
   if (url.includes("/embed/"))  return url.split("/embed/")[1].split(/[?&#]/)[0];
   if (url.includes("/shorts/")) return url.split("/shorts/")[1].split(/[?&#]/)[0];
   return "";
 }
+
+// ---- smart table renderer (formats DATE columns) ----
+function renderTable(aoa, targetSel){
+  const el = $(targetSel);
+  if(!el){ return; }
+  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
+
+  const headers = (aoa[0] || []).map(h => String(h));
+  const dateCols = new Set();
+  headers.forEach((h,i)=>{ if(/date/i.test(h)) dateCols.add(i); });
+
+  function prettyDateCell(v){
+    const d = excelSerialToDate(v) || new Date(v);
+    return (d && !isNaN(d)) ? niceDate(d) : String(v);
+  }
+
+  let html = "<table>";
+  aoa.forEach((row,rIdx)=>{
+    html += "<tr>";
+    row.forEach((cell,cIdx)=>{
+      let out = String(cell);
+      if(rIdx>0 && dateCols.has(cIdx)) out = prettyDateCell(cell);
+      html += (rIdx===0? `<th>${out}</th>` : `<td>${out}</td>`);
+    });
+    html += "</tr>";
+  });
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+function renderSermon(targetSel, sermon){
+  const el = $(targetSel);
+  el.textContent = sermon ? `Sermon: ${sermon}` : "";
+}
 function renderYouTube(targetSel, url){
   const el = $(targetSel);
   el.innerHTML = "";
   const id = extractYouTubeId(url);
-  if(!id){
-    el.textContent = "No video for this week.";
-    return;
-  }
+  if(!id){ el.textContent = "No video for this week."; return; }
   const embed = `https://www.youtube.com/embed/${id}`;
   el.innerHTML = `
     <iframe
@@ -123,7 +142,7 @@ function renderYouTube(targetSel, url){
   `;
 }
 
-// ---------- Setlist meta ----------
+// ---- parse Meta/columns for Sermon/YouTube/Date ----
 function parseMeta(wb, aoa){
   let sermon="", youtube="", serviceDate=null;
 
@@ -144,7 +163,8 @@ function parseMeta(wb, aoa){
     const hdr = aoa[0].map(h=>String(h).toLowerCase());
     const sIdx = hdr.indexOf("sermon");
     const yIdx = hdr.indexOf("youtube");
-    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date") : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
+    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date")
+               : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
     if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
     if(!youtube && yIdx>=0) youtube = aoa[1]?.[yIdx] || "";
     if(!serviceDate && dIdx>=0){
@@ -155,21 +175,7 @@ function parseMeta(wb, aoa){
   return { sermon, youtube, serviceDate };
 }
 
-// ---------- generic table render ----------
-function renderTable(aoa, targetSel){
-  const el = $(targetSel);
-  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
-  let html = "<table>";
-  aoa.forEach((row,i)=>{
-    html += "<tr>";
-    row.forEach(cell => { html += (i===0? "<th>":"<td>") + String(cell) + (i===0? "</th>":"</td>"); });
-    html += "</tr>";
-  });
-  html += "</table>";
-  el.innerHTML = html;
-}
-
-// ---------- Announcements ----------
+// ---- announcements ----
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
@@ -182,9 +188,8 @@ async function loadAnnouncements(){
     const idxDate = dateIdx >= 0 ? dateIdx : 0;
     const idxText = textIdx >= 0 ? textIdx : 1;
 
-    // Build rows with parsed date + pretty text
     const rows = aoa.slice(1)
-      .filter(r => r.some(c => String(c).trim() !== ""))
+      .filter(r => r.some(c => String(c).trim()!==""))
       .map(r => {
         const d = excelSerialToDate(r[idxDate]) || new Date(r[idxDate]);
         const ds = (!isNaN(d)) ? niceDate(d) : String(r[idxDate]);
@@ -192,24 +197,21 @@ async function loadAnnouncements(){
         return { d: (!isNaN(d) ? d : null), ds, txt };
       });
 
-    // Sort newest first when we have dates
-    rows.sort((a,b) => {
-      if (a.d && b.d) return b.d - a.d;
-      if (a.d) return -1;
-      if (b.d) return 1;
+    rows.sort((a,b)=>{
+      if(a.d && b.d) return b.d - a.d;
+      if(a.d) return -1;
+      if(b.d) return 1;
       return 0;
     });
 
-    // Final AOA -> render
     const pretty = [["DATE","ANNOUNCEMENT"], ...rows.map(r => [r.ds, r.txt])];
     renderTable(pretty, "#announcements-table");
   }catch(e){
-    console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Title/Announcement | Details.</p>`;
   }
 }
 
-// ---------- Setlists (Next & Last) ----------
+// ---- setlists (This Coming Week & Last Week) ----
 async function getDatedFiles(){
   const items = await listDir(PATHS.setlistsDir);
   return items
@@ -225,47 +227,46 @@ async function loadSetlists(){
   let nextRendered = false;
   let specialMeta = null;
 
-  if(specialExists){
-    try{
+  if (specialExists) {
+    try {
       const wb = await fetchWB(PATHS.specialCurrent);
       const aoa = firstSheetAOA(wb);
       const { sermon, youtube, serviceDate } = parseMeta(wb, aoa);
 
-      $("#next-date").textContent = serviceDate ? fullNiceDate(serviceDate) : "This Week";
+      $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
       renderTable(aoa, "#next-setlist");
-      if (sermon) $("#next-sermon").textContent = `Sermon: ${sermon}`;
+      renderSermon("#next-sermon", sermon);
       renderYouTube("#youtube-video", youtube);
       nextRendered = true;
 
-      // Determine "Last Week" relative to special service date (if available)
       let last = null;
-      if(serviceDate){
+      if (serviceDate) {
         const before = dated.filter(f => f.date < serviceDate);
         last = before[before.length - 1] || null;
-      }else{
+      } else {
         last = dated[dated.length - 1] || null;
       }
 
-      if(last){
-        $("#last-date").textContent = fullNiceDate(last.date);
+      if (last) {
+        $("#last-date").textContent = niceDate(last.date);
         const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
         const aoa2 = firstSheetAOA(wb2);
         renderTable(aoa2, "#last-setlist");
         const meta2 = parseMeta(wb2, aoa2);
-        if (meta2.sermon) $("#last-sermon").textContent = `Sermon: ${meta2.sermon}`;
-      }else{
+        renderSermon("#last-sermon", meta2.sermon);
+      } else {
         $("#last-date").textContent = "—";
         $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
       }
 
       specialMeta = { wb, aoa, serviceDate };
-    }catch(e){
+    } catch {
       nextRendered = false;
     }
   }
 
-  if(!nextRendered){
-    if(dated.length===0){
+  if (!nextRendered) {
+    if (dated.length === 0) {
       $("#next-date").textContent = "No setlists yet.";
       $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
       $("#last-date").textContent = "—";
@@ -276,26 +277,26 @@ async function loadSetlists(){
 
     const today = new Date(); today.setHours(0,0,0,0);
     let nextIdx = dated.findIndex(f => f.date >= today);
-    if(nextIdx === -1) nextIdx = dated.length - 1;
+    if (nextIdx === -1) nextIdx = dated.length - 1;
 
     const next = dated[nextIdx];
     const wb = await fetchWB(`${PATHS.setlistsDir}/${next.name}`);
     const aoa = firstSheetAOA(wb);
     renderTable(aoa, "#next-setlist");
-    $("#next-date").textContent = fullNiceDate(next.date);
+    $("#next-date").textContent = niceDate(next.date);
     const meta = parseMeta(wb, aoa);
-    if (meta.sermon) $("#next-sermon").textContent = `Sermon: ${meta.sermon}`;
+    renderSermon("#next-sermon", meta.sermon);
     renderYouTube("#youtube-video", meta.youtube);
 
     const last = dated[nextIdx - 1] || (dated.length >= 2 ? dated[dated.length - 2] : null);
-    if(last){
-      $("#last-date").textContent = fullNiceDate(last.date);
+    if (last) {
+      $("#last-date").textContent = niceDate(last.date);
       const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
       const aoa2 = firstSheetAOA(wb2);
       renderTable(aoa2, "#last-setlist");
       const meta2 = parseMeta(wb2, aoa2);
-      if (meta2.sermon) $("#last-sermon").textContent = `Sermon: ${meta2.sermon}`;
-    }else{
+      renderSermon("#last-sermon", meta2.sermon);
+    } else {
       $("#last-date").textContent = "—";
       $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
     }
@@ -304,16 +305,13 @@ async function loadSetlists(){
   return { dated, specialMeta };
 }
 
-// ---------- Analytics (unchanged from previous good version) ----------
+// ---- analytics (Current Year, auto after load) ----
 async function buildAnalytics(dated, specialMeta){
-  const useSpecialOnly = dated.length === 0 && specialMeta;
+  const currentYear = new Date().getFullYear();
 
-  if(dated.length===0 && !useSpecialOnly){
-    $("#top5").innerHTML = `<li class="dim">No data yet.</li>`;
-    $("#bottom5").innerHTML = `<li class="dim">No data yet.</li>`;
-    $("#library-table").innerHTML = `<p class="dim">No setlists found.</p>`;
-    return;
-  }
+  const datedThisYear = (dated || []).filter(
+    f => f.date && f.date.getFullYear() === currentYear
+  );
 
   const songCounts = new Map();  // title -> plays
   const songKeys   = new Map();  // title -> Set(keys)
@@ -337,32 +335,52 @@ async function buildAnalytics(dated, specialMeta){
     }
   }
 
-  if(useSpecialOnly){
+  // Include special "current" setlist if:
+  //  - it has a serviceDate in the current year, OR
+  //  - no date provided (assume current year to reflect newest songs)
+  const includeSpecial =
+    !!specialMeta && (
+      !specialMeta.serviceDate ||
+      specialMeta.serviceDate.getFullYear() === currentYear
+    );
+
+  if (datedThisYear.length === 0 && includeSpecial) {
     await accumulateFromWB(specialMeta.wb);
-  }else{
-    for(const f of dated){
+  } else {
+    for (const f of datedThisYear) {
       const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
       await accumulateFromWB(wb);
     }
+    if (includeSpecial) {
+      await accumulateFromWB(specialMeta.wb);
+    }
   }
 
-  const entries = Array.from(songCounts.entries());
+  if (songCounts.size === 0) {
+    $("#top5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
+    $("#library-table").innerHTML = `<p class="dim">No setlists found for ${currentYear}.</p>`;
+    return;
+  }
+
+  const entries = Array.from(songCounts.entries()); // [title, count]
   entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
   const top5 = entries.slice(0,5);
-  $("#top5").innerHTML = top5.length
-    ? top5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("")
-    : `<li class="dim">No data yet.</li>`;
+  $("#top5").innerHTML = top5
+    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
+    .join("");
 
   const bottom5 = entries.slice().sort((a,b)=> a[1]-b[1] || a[0].localeCompare(b[0])).slice(0,5);
-  $("#bottom5").innerHTML = bottom5.length
-    ? bottom5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("")
-    : `<li class="dim">No data yet.</li>`;
+  $("#bottom5").innerHTML = bottom5
+    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
+    .join("");
 
+  // Library (current year)
   const header = ["Song","Keys Used","Plays"];
   let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
-  const allTitles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
-  for(const t of allTitles){
+  const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
+  for (const t of titles) {
     const keysUsed = songKeys.get(t) ? Array.from(songKeys.get(t)).sort().join(", ") : "";
     const plays = songCounts.get(t) || 0;
     html += `<tr><td>${t}</td><td>${keysUsed}</td><td>${plays}</td></tr>`;
@@ -371,7 +389,7 @@ async function buildAnalytics(dated, specialMeta){
   $("#library-table").innerHTML = html;
 }
 
-// ---------- boot ----------
+// ---- boot ----
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
     await loadAnnouncements();
