@@ -4,37 +4,188 @@
   <meta charset="utf-8" />
   <title>Hmong First Baptist Church – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Header / Nav -->
   <header class="site-header">
     <div class="container nav">
-      <div class="brand">Hmong First Baptist Church – Praise & Worship</div>
+      <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
       <nav>
-        <a href="#home" class="nav-link">Home</a>
-        <a href="#archive" class="nav-link">Archive</a>
+        <a href="#projects">Projects</a>
+        <a href="#next">Next Service</a>
+        <a href="#archive">Archive</a>
+        <a href="#announcements">Announcements</a>
+        <a href="#library">Song Library</a>
+        <a href="#media">Media</a>
+        <a href="#team">Team</a>
       </nav>
     </div>
   </header>
 
-  <main class="container">
-    <!-- Home / Latest -->
-    <section id="home" class="route">
-      <div class="card">
-        <h2>Next Service Setlist</h2>
-        <div id="latest-setlist">Loading latest setlist…</div>
-        <div id="youtube-video"></div>
+  <!-- Hero -->
+  <section id="top" class="hero">
+    <div class="container hero-inner">
+      <div class="hero-text">
+        <h1>Praise & Worship Team</h1>
+        <p class="subtitle">Setlists, announcements, media, and resources—updated weekly for the worship team.</p>
+        <div class="actions">
+          <a class="btn" href="#next">View Next Service</a>
+          <a class="btn outline" href="#projects">Open Projects</a>
+        </div>
+        <ul class="meta-list">
+          <li><span class="badge">Weekly Updates</span></li>
+          <li><span class="badge">Excel-Driven</span></li>
+          <li><span class="badge">YouTube Embed</span></li>
+        </ul>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- Archive -->
-    <section id="archive" class="route" hidden>
-      <div class="card">
-        <h2>Setlist Archive</h2>
-        <ul id="archive-list" class="bullets"></ul>
+  <!-- Projects Grid (portfolio-style) -->
+  <section id="projects" class="section">
+    <div class="container">
+      <h2 class="section-title">Projects</h2>
+      <div class="grid cards">
+        <!-- Card: Setlist Manager -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Setlist Manager</h3>
+            <p>Upload weekly Excel files (<code>setlists/YYYY-MM-DD.xlsx</code>) to publish songs and notes.</p>
+            <div class="pill-row">
+              <span class="pill">Excel</span><span class="pill">Auto-detect</span><span class="pill">No backend</span>
+            </div>
+            <div class="links">
+              <a href="#next">Next Service</a>
+              <a href="#archive">Archive</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card: Announcements -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Announcements</h3>
+            <p>Keep the team aligned. Edit a single Excel file: <code>announcements/announcements.xlsx</code>.</p>
+            <div class="pill-row">
+              <span class="pill">Excel</span><span class="pill">Team Info</span>
+            </div>
+            <div class="links">
+              <a href="#announcements">View Announcements</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card: Song Library -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Song Library</h3>
+            <p>Auto-collect unique songs from all setlists for quick reference and planning.</p>
+            <div class="pill-row">
+              <span class="pill">Keys</span><span class="pill">CCLI</span><span class="pill">Links</span>
+            </div>
+            <div class="links">
+              <a href="#library">Open Library</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card: Media & Livestream -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Media & Livestream</h3>
+            <p>Embed the week’s YouTube practice or livestream link (sheet <code>Meta</code> → <code>YouTube</code>).</p>
+            <div class="pill-row">
+              <span class="pill">YouTube</span><span class="pill">Practice</span>
+            </div>
+            <div class="links">
+              <a href="#media">Open Media</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card: Team Roster -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Team Roster</h3>
+            <p>Optional <code>Team</code> sheet in each week’s Excel shows roles and members for that service.</p>
+            <div class="pill-row">
+              <span class="pill">Roles</span><span class="pill">Rotation</span>
+            </div>
+            <div class="links">
+              <a href="#team">View Team</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card: Schedule & Planning -->
+        <article class="card project">
+          <div class="card-body">
+            <h3>Schedule & Planning</h3>
+            <p>Use archive trends to plan new sets and balance new vs. familiar songs.</p>
+            <div class="pill-row">
+              <span class="pill">Rotation</span><span class="pill">Variety</span>
+            </div>
+            <div class="links">
+              <a href="#archive">Explore Archive</a>
+            </div>
+          </div>
+        </article>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <!-- Next Service -->
+  <section id="next" class="section alt">
+    <div class="container">
+      <h2 class="section-title">Next Service</h2>
+      <div class="grid two">
+        <article class="card">
+          <h3 id="next-date">Loading…</h3>
+          <div id="next-setlist">Please wait…</div>
+        </article>
+        <article class="card">
+          <h3>Practice / Livestream Video</h3>
+          <div id="youtube-video" class="youtube">No video yet.</div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Archive -->
+  <section id="archive" class="section">
+    <div class="container">
+      <h2 class="section-title">Setlist Archive</h2>
+      <div id="archive-list" class="list">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Announcements -->
+  <section id="announcements" class="section alt">
+    <div class="container">
+      <h2 class="section-title">Announcements</h2>
+      <div id="announcements-table">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Song Library -->
+  <section id="library" class="section">
+    <div class="container">
+      <h2 class="section-title">Song Library</h2>
+      <div id="library-table">Collecting songs…</div>
+    </div>
+  </section>
+
+  <!-- Team -->
+  <section id="team" class="section alt">
+    <div class="container">
+      <h2 class="section-title">Team Roster (Next Service)</h2>
+      <div id="team-list">Loading roles…</div>
+    </div>
+  </section>
 
   <footer class="site-footer">
     <div class="container">
