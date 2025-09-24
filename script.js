@@ -1,6 +1,8 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   (No timestamp; dates include weekday)
+   - Second pie chart: Most Popular Topics (from setlist.xlsx)
+   - "Least Popular" songs list replaced with "Top 5 – Most Popular Topics"
+   - All dates include weekday (e.g., "Sunday, Sep 28, 2025")
 ========================= */
 
 /* ---------- CONFIG ---------- */
@@ -339,37 +341,59 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // Analytics (counts per song)
+    // --- Analytics (Songs Pie + Topics Pie + Lists) ---
+    // SONG COUNTS (all rows)
+    let songCounts = [];
     if(idxSong !== -1){
       const counts = new Map();
       for(const r of rows){
         const s = String(r[idxSong] ?? "").trim();
         if(s) counts.set(s, (counts.get(s)||0)+1);
       }
-      const sorted = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
-      const top5 = sorted.slice(0,5);
-      const bottom5 = sorted.slice(-5).reverse();
-
-      $("#top5").innerHTML = top5.length
-        ? top5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
-        : `<li class="dim">No data</li>`;
-
-      $("#bottom5").innerHTML = bottom5.length
-        ? bottom5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
-        : `<li class="dim">No data</li>`;
-
-      drawPie(sorted.slice(0,7));
-      drawBar(top5);
-    }else{
-      $("#top5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
-      $("#bottom5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
+      songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
     }
+
+    // TOPIC COUNTS (de-dup per service date to avoid inflating)
+    let topicCounts = [];
+    if(idxSermon !== -1){
+      const tCounts = new Map();
+      const seen = new Set(); // date|topic
+      for(const r of rows){
+        const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+        const t = String(r[idxSermon] ?? "").trim();
+        if(!t) continue;
+        const key = `${d ? d.getTime() : "nodate"}|${t.toLowerCase()}`;
+        if(seen.has(key)) continue;
+        seen.add(key);
+        tCounts.set(t, (tCounts.get(t)||0)+1);
+      }
+      topicCounts = [...tCounts.entries()].sort((a,b)=>b[1]-a[1]);
+    }
+
+    // Lists
+    const top5Songs = songCounts.slice(0,5);
+    $("#top5").innerHTML = top5Songs.length
+      ? top5Songs.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
+      : `<li class="dim">No data</li>`;
+
+    const topicsHeader = $("#bottom5")?.previousElementSibling;
+    if(topicsHeader) topicsHeader.textContent = "Top 5 – Most Popular Topics";
+    const top5Topics = topicCounts.slice(0,5);
+    $("#bottom5").innerHTML = top5Topics.length
+      ? top5Topics.map(([t,c])=>`<li>${escapeHtml(safeLabel(t))} — ${c}</li>`).join("")
+      : `<li class="dim">No topics</li>`;
+
+    // Charts
+    drawSongsPie(songCounts.slice(0,7));   // left pie: songs
+    drawTopicsPie(topicCounts.slice(0,7)); // right pie: topics
+    updateSecondChartTitle("Most Popular Topics (Pie)");
   }catch(e){
     console.error(e);
     $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
     $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
   }
 }
+
 function renderSetlistGroup(group, metaSel, tableSel){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
   $(metaSel).textContent =
@@ -435,20 +459,20 @@ async function wikipediaOpenSearch(q){
   return j?.[1]?.[0] || "";
 }
 
-/* ---------- Charts (pie with %; bar colors by quarter) ---------- */
-let pieInst, barInst;
+/* ---------- Charts ---------- */
+let songsPieInst, topicsPieInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
-// PIE
-function drawPie(entries){
+// Left pie: Plays by Song
+function drawSongsPie(entries){
   const ctx = $("#pieChart");
-  destroyChart(pieInst);
+  destroyChart(songsPieInst);
 
   const labels = entries.map(e => safeLabel(e[0]));
   const data = entries.map(e => e[1]);
   const total = data.reduce((a,b)=>a+(+b||0), 0) || 1;
 
-  pieInst = new Chart(ctx, {
+  songsPieInst = new Chart(ctx, {
     type: "pie",
     data: { labels, datasets:[{ data }] },
     options: {
@@ -484,34 +508,56 @@ function drawPie(entries){
   });
 }
 
-// BAR
-function drawBar(entries){
-  const ctx = $("#barChart");
-  destroyChart(barInst);
+// Right pie: Most Popular Topics
+function drawTopicsPie(entries){
+  const ctx = $("#barChart"); // reuse existing canvas slot
+  destroyChart(topicsPieInst);
 
   const labels = entries.map(e => safeLabel(e[0]));
-  const data   = entries.map(e => e[1]);
+  const data = entries.map(e => e[1]);
+  const total = data.reduce((a,b)=>a+(+b||0), 0) || 1;
 
-  const quarterColors = ["#4e79a7","#f28e2b","#e15759","#76b7b2"]; // cycle Q1–Q4
-  const bg = labels.map((_, i) => quarterColors[i % 4]);
-  const border = bg;
-
-  barInst = new Chart(ctx, {
-    type: "bar",
-    data: { labels, datasets: [{ label: "Plays", data, backgroundColor: bg, borderColor: border, borderWidth: 1 }] },
+  topicsPieInst = new Chart(ctx, {
+    type: "pie",
+    data: { labels, datasets:[{ data }] },
     options: {
       responsive: true,
-      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
       plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            generateLabels(chart){
+              const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              const ds   = chart.data.datasets[0]?.data || [];
+              const lbs  = chart.data.labels || [];
+              const sum  = ds.reduce((a,b)=>a+(+b||0),0) || 1;
+              return base.map((item, i) => {
+                const val = +ds[i] || 0;
+                const pct = Math.round((val/sum)*1000)/10;
+                return { ...item, text: `${safeLabel(lbs[i])} — ${pct}%` };
+              });
+            }
+          }
+        },
         tooltip: {
           callbacks: {
-            title(items){ return items.length ? safeLabel(items[0].label) : ""; },
-            label(ctx){ return `Plays: ${+ctx.parsed.y || 0}`; }
+            label(ctx){
+              const val = +ctx.parsed || 0;
+              const pct = Math.round((val/total)*1000)/10;
+              return `${safeLabel(ctx.label)}: ${val} (${pct}%)`;
+            }
           }
         }
       }
     }
   });
+}
+
+// Adjust the title above the right-hand chart card
+function updateSecondChartTitle(text){
+  const card = $("#barChart")?.closest(".chart-card");
+  const h3 = card?.querySelector("h3");
+  if(h3) h3.textContent = text;
 }
 
 /* ---------- BOOT ---------- */
