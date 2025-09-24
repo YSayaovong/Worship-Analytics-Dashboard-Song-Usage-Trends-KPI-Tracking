@@ -2,106 +2,89 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>HFBC Worship — Single Page Hub</title>
+  <title>Hmong First Baptist Church – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Styles -->
-  <link rel="stylesheet" href="styles.css" />
-  <!-- Vendor CDNs -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js" defer></script>
-  <!-- App -->
-  <script src="script.js" defer></script>
+  <meta name="color-scheme" content="dark light" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div>
-          <h1>HFBC Worship Hub</h1>
-          <div class="small">Single-page site pulling data straight from GitHub Excel files</div>
-        </div>
-      </div>
-      <nav class="links">
-        <a class="chip" href="https://ysayaovong.github.io/HFBC_Praise_Worship/" target="_blank" rel="noopener">Public Site</a>
-        <a class="chip" href="https://github.com/YSayaovong/HFBC_Praise_Worship" target="_blank" rel="noopener">GitHub Repo</a>
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="#top">Hmong First Baptist Church – Praise & Worship</a>
+      <nav>
+        <a href="#announcements">Announcements</a>
+        <a href="#setlists">Setlists</a>
+        <a href="#analytics">Song Analytics</a>
       </nav>
-    </header>
-
-    <div class="panel">
-      <h2>Data Sources (GitHub)</h2>
-      <div class="input-row">
-        <input id="annUrl" type="url" placeholder="Announcements.xlsx URL"
-               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx">
-        <input id="bibleUrl" type="url" placeholder="Bible Study.xlsx URL"
-               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx">
-      </div>
-      <div class="input-row">
-        <input id="membersUrl" type="url" placeholder="Members.xlsx URL"
-               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx">
-        <input id="setlistUrl" type="url" placeholder="Setlist.xlsx URL"
-               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx">
-      </div>
-      <button id="loadBtn">Load / Refresh</button>
-      <div id="status" class="status muted"></div>
-      <details class="notice">
-        <summary>Note on GitHub URLs</summary>
-        This page automatically converts <span class="mono">github.com/.../blob/main/...</span> to
-        <span class="mono">raw.githubusercontent.com</span> for downloading the Excel files.
-      </details>
     </div>
+  </header>
 
-    <div class="grid" style="margin-top:16px">
-      <section class="panel">
-        <h2>Announcements</h2>
-        <div class="kpi" id="annKpi"></div>
-        <div id="annTable"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Bible Study</h2>
-        <div class="kpi" id="bibleKpi"></div>
-        <div id="bibleTable"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Members</h2>
-        <div class="kpi" id="membersKpi"></div>
-        <div id="membersTable"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Setlist</h2>
-        <div class="kpi" id="setlistKpi"></div>
-        <div id="setlistTable"></div>
-      </section>
-    </div>
-
-    <section class="panel" style="margin-top:16px">
-      <h2>Song Analytics</h2>
-      <div class="kpi">
-        <span id="topSong" class="pill">Top song: <span class="muted">—</span></span>
-        <span id="leastSong" class="pill">Least played: <span class="muted">—</span></span>
-        <span id="totalPlays" class="pill">Total plays: <span class="muted">—</span></span>
-        <span id="uniqueSongs" class="pill">Unique songs: <span class="muted">—</span></span>
-      </div>
-      <div class="charts" style="margin-top:10px">
-        <div class="panel" style="padding:12px">
-          <h3>Most Played Songs (Bar)</h3>
-          <canvas id="barChart"></canvas>
-        </div>
-        <div class="panel" style="padding:12px">
-          <h3>Top Songs Share (Pie)</h3>
-          <canvas id="pieChart"></canvas>
-        </div>
-      </div>
-      <div class="panel" style="padding:12px;margin-top:16px">
-        <h3>Plays Over Time (Line)</h3>
-        <canvas id="lineChart"></canvas>
+  <main id="top">
+    <!-- Announcements -->
+    <section id="announcements" class="section">
+      <div class="container">
+        <h2 class="section-title">Announcements</h2>
+        <div id="announcements-table" class="card">Loading announcements…</div>
       </div>
     </section>
 
-    <div class="footer">Built with plain HTML/CSS/JS • SheetJS for Excel, Chart.js for charts</div>
-  </div>
+    <!-- Setlists -->
+    <section id="setlists" class="section alt">
+      <div class="container">
+        <h2 class="section-title">Setlists</h2>
+        <div class="grid two">
+          <!-- Coming Week -->
+          <article class="card">
+            <h3>This Coming Week</h3>
+            <p id="next-date" class="meta">Detecting next service…</p>
+            <div id="next-sermon" class="meta"></div>
+            <div id="next-setlist">Please wait…</div>
+          </article>
+
+          <!-- Last Week -->
+          <article class="card">
+            <h3>Last Week</h3>
+            <p id="last-date" class="meta">—</p>
+            <div id="last-sermon" class="meta"></div>
+            <div id="last-setlist">Please wait…</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Song analytics & library -->
+    <section id="analytics" class="section alt">
+      <div class="container">
+        <h2 class="section-title">Song Analytics</h2>
+        <div class="grid two">
+          <article class="card">
+            <h3>Top 5 – Most Popular</h3>
+            <ol id="top5" class="ranked"><li class="dim">No data yet.</li></ol>
+          </article>
+          <article class="card">
+            <h3>Top 5 – Least Popular</h3>
+            <ol id="bottom5" class="ranked"><li class="dim">No data yet.</li></ol>
+          </article>
+        </div>
+
+        <div class="card">
+          <h3>Song Library (Current Year)</h3>
+          <p class="dim small">Unique songs with keys we have used.</p>
+          <div id="library-table">Building library…</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p class="dim">© <span id="year"></span> Hmong First Baptist Church • Praise & Worship Team</p>
+    </div>
+  </footer>
+
+  <!-- SheetJS for reading Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="script.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

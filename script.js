@@ -1,218 +1,364 @@
-// ---------- DOM helpers ----------
-const $ = (id) => document.getElementById(id);
+/* Hmong First Baptist Church – Praise & Worship
+   Static site (no backend) powered by Excel files on GitHub.
 
-// Convert GitHub "blob" URL to raw.githubusercontent.com
-function toRawGithub(url){
-  try{
-    const u = new URL(url);
-    if (u.hostname === 'raw.githubusercontent.com') return url;
-    if (u.hostname === 'github.com'){
-      const parts = u.pathname.split('/');
-      const i = parts.indexOf('blob');
-      if (i !== -1){
-        const owner = parts[1], repo = parts[2], branch = parts[i+1];
-        const path = parts.slice(i+2).join('/');
-        return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
-      }
-    }
-  }catch(e){}
-  return url;
+   Reads weekly content:
+     • /setlist/setlist.xlsx           (preferred "This Coming Week")
+     • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
+     • /announcements/announcements.xlsx
+*/
+
+// ---- repo config ----
+const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
+const PATHS = {
+  specialCurrent: "setlist/setlist.xlsx",
+  setlistsDir: "setlists",
+  announcements: "announcements/announcements.xlsx"
+};
+
+// ---- basic helpers ----
+const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
+const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
+const $ = (s) => document.querySelector(s);
+
+async function existsOnGitHub(path){
+  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
+  return r.ok;
+}
+async function listDir(path){
+  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
+  if(!r.ok) return [];
+  return r.json();
+}
+async function fetchWB(path){
+  const r = await fetch(rawURL(path));
+  if(!r.ok) throw new Error(`Fetch error ${r.status} for ${path}`);
+  const ab = await r.arrayBuffer();
+  return XLSX.read(ab, { type: "array" });
+}
+function firstSheetAOA(wb){
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sh, { header:1, defval:"" });
+}
+function toDateFromName(name){ // 2025-10-05.xlsx
+  const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
+  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
+}
+function niceDate(d){
+  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
 }
 
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, ch=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch]));
-}
-
-function setKpi(id, text){ $(id).innerHTML = `<span class="pill">${escapeHtml(text)}</span>`; }
-
-function renderTable(rows, mountId, limit=200){
-  if (!rows || rows.length===0){
-    $(mountId).innerHTML = `<div class="small muted">No rows.</div>`;
-    return;
+// ---- Excel date + text helpers ----
+function excelSerialToDate(val){
+  if (typeof val === "number") {
+    const o = XLSX.SSF.parse_date_code(val);
+    if (o) return new Date(o.y, o.m - 1, o.d);
   }
-  const headers = Object.keys(rows[0]);
-  const head = `<tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
-  const body = rows.slice(0,limit).map(r=>{
-    return `<tr>${headers.map(h=>`<td>${escapeHtml(String(r[h]))}</td>`).join('')}</tr>`;
-  }).join('');
-  $(mountId).innerHTML = `<div class="small muted">Showing ${Math.min(rows.length,limit)} of ${rows.length} rows</div>
-    <div style="overflow:auto;max-height:380px;border:1px solid rgba(255,255,255,.06);border-radius:10px">
-      <table><thead>${head}</thead><tbody>${body}</tbody></table>
-    </div>`;
-}
-
-// ---------- Excel loading ----------
-async function fetchSheet(url){
-  const raw = toRawGithub(url);
-  const res = await fetch(raw, {mode:'cors'});
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${raw}`);
-  const buf = await res.arrayBuffer();
-  const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
-  return {rows, sheetName, count: rows.length};
-}
-
-// ---------- Analytics (Setlist) ----------
-function pickColumn(headers, candidates){
-  const lower = headers.map(h=>h.toLowerCase());
-  for (const cand of candidates){
-    const idx = lower.findIndex(h=> h===cand || h.includes(cand));
-    if (idx !== -1) return headers[idx];
+  if (typeof val === "string" && val.trim() !== "") {
+    const num = Number(val);
+    if (!Number.isNaN(num)) {
+      const o = XLSX.SSF.parse_date_code(num);
+      if (o) return new Date(o.y, o.m - 1, o.d);
+    }
+    const d = new Date(val);
+    if (!Number.isNaN(d)) return d;
   }
   return null;
 }
-
-function parseDateFlexible(val){
-  if (!val) return null;
-  if (typeof val === 'number'){
-    const epoch = new Date(Date.UTC(1899,11,30)); // Excel serial date base
-    const ms = val * 86400000;
-    return new Date(epoch.getTime()+ms);
-  }
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d;
+function normalizeAnnouncementText(s){
+  let out = String(s ?? "");
+  out = out.replace(/:(?=\d)/g, ": "); // add space after ":" before a digit
+  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2"); // word then date
+  return out.trim();
 }
 
-function buildSongStats(setlistRows){
-  if (!setlistRows || setlistRows.length===0) return null;
-  const headers = Object.keys(setlistRows[0]);
-  const songCol = pickColumn(headers, ['song title','song','title','songs']);
-  const dateCol = pickColumn(headers, ['date','service date','when','week']);
+// ---- smart table renderer (formats DATE columns) ----
+function renderTable(aoa, targetSel){
+  const el = $(targetSel);
+  if(!el){ return; }
+  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
 
-  const counts = new Map();
-  const timeline = new Map(); // yyyy-mm -> count
-  let total = 0;
+  const headers = (aoa[0] || []).map(h => String(h));
+  const dateCols = new Set();
+  headers.forEach((h,i)=>{ if(/date/i.test(h)) dateCols.add(i); });
 
-  for(const r of setlistRows){
-    const name = (r[songCol] ?? '').toString().trim();
-    if (name){
-      counts.set(name, (counts.get(name)||0)+1);
-      total++;
-    }
-    if (dateCol){
-      const dt = parseDateFlexible(r[dateCol]);
-      if (dt){
-        const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-        timeline.set(key, (timeline.get(key)||0)+1);
+  function prettyDateCell(v){
+    const d = excelSerialToDate(v) || new Date(v);
+    return (d && !isNaN(d)) ? niceDate(d) : String(v);
+  }
+
+  let html = "<table>";
+  aoa.forEach((row,rIdx)=>{
+    html += "<tr>";
+    row.forEach((cell,cIdx)=>{
+      let out = String(cell);
+      if(rIdx>0 && dateCols.has(cIdx)) out = prettyDateCell(cell);
+      html += (rIdx===0? `<th>${out}</th>` : `<td>${out}</td>`);
+    });
+    html += "</tr>";
+  });
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+function renderSermon(targetSel, sermon){
+  const el = $(targetSel);
+  el.textContent = sermon ? `Sermon: ${sermon}` : "";
+}
+
+// ---- parse Meta/columns for Sermon/Date ----
+function parseMeta(wb, aoa){
+  let sermon="", serviceDate=null;
+
+  if(wb.Sheets["Meta"]){
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
+    for(const r of rows){
+      const k = String(r[0]||"").toLowerCase();
+      const v = r[1] || "";
+      if(k==="sermon")  sermon = v || sermon;
+      if(k==="date" || k==="servicedate" || k==="service date"){
+        const d = excelSerialToDate(v) || new Date(v);
+        if(!isNaN(d)) serviceDate = d;
       }
     }
   }
-  const freq = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]);
-  const top = freq[0] || ['—', 0];
-  const least = freq.length ? freq.at(-1) : ['—', 0];
-  const unique = counts.size;
-
-  const tl = Array.from(timeline.entries()).sort((a,b)=> a[0].localeCompare(b[0]));
-  return {freq, top, least, unique, total, timeline: tl};
+  if(aoa && aoa[0]){
+    const hdr = aoa[0].map(h=>String(h).toLowerCase());
+    const sIdx = hdr.indexOf("sermon");
+    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date")
+               : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
+    if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
+    if(!serviceDate && dIdx>=0){
+      const d = excelSerialToDate(aoa[1]?.[dIdx]) || new Date(aoa[1]?.[dIdx]);
+      if(!isNaN(d)) serviceDate = d;
+    }
+  }
+  return { sermon, serviceDate };
 }
 
-// ---------- Charts ----------
-let barChart, pieChart, lineChart;
-function upsertChart(ctxId, type, data, options){
-  const existing = {barChart, pieChart, lineChart}[ctxId];
-  if (existing) existing.destroy();
-  const ctx = document.getElementById(ctxId).getContext('2d');
-  const chart = new Chart(ctx, { type, data, options });
-  if (ctxId==='barChart') barChart = chart;
-  if (ctxId==='pieChart') pieChart = chart;
-  if (ctxId==='lineChart') lineChart = chart;
+// ---- announcements ----
+async function loadAnnouncements(){
+  try{
+    const wb = await fetchWB(PATHS.announcements);
+    const aoa = firstSheetAOA(wb);
+    if(aoa.length===0){ $("#announcements-table").textContent = "No announcements."; return; }
+
+    const headers = aoa[0].map(h => String(h));
+    const dateIdx = headers.findIndex(h => /date/i.test(h));
+    const textIdx = headers.findIndex(h => /(announcement|details?)/i.test(h));
+    const idxDate = dateIdx >= 0 ? dateIdx : 0;
+    const idxText = textIdx >= 0 ? textIdx : 1;
+
+    const rows = aoa.slice(1)
+      .filter(r => r.some(c => String(c).trim()!==""))
+      .map(r => {
+        const d = excelSerialToDate(r[idxDate]) || new Date(r[idxDate]);
+        const ds = (!isNaN(d)) ? niceDate(d) : String(r[idxDate]);
+        const txt = normalizeAnnouncementText(r[idxText] || "");
+        return { d: (!isNaN(d) ? d : null), ds, txt };
+      });
+
+    rows.sort((a,b)=>{
+      if(a.d && b.d) return b.d - a.d;
+      if(a.d) return -1;
+      if(b.d) return 1;
+      return 0;
+    });
+
+    const pretty = [["DATE","ANNOUNCEMENT"], ...rows.map(r => [r.ds, r.txt])];
+    renderTable(pretty, "#announcements-table");
+  }catch(e){
+    $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Title/Announcement | Details.</p>`;
+  }
 }
 
-function drawCharts(stats){
-  if (!stats){
-    upsertChart('barChart','bar',{labels:[],datasets:[{label:'No data',data:[]}]},{});
-    upsertChart('pieChart','pie',{labels:[],datasets:[{label:'No data',data:[]}]},{});
-    upsertChart('lineChart','line',{labels:[],datasets:[{label:'No data',data:[]}]},{});
+// ---- setlists (This Coming Week & Last Week) ----
+async function getDatedFiles(){
+  const items = await listDir(PATHS.setlistsDir);
+  return items
+    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
+    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
+    .sort((a,b)=> a.date - b.date); // oldest -> newest
+}
+
+async function loadSetlists(){
+  const dated = await getDatedFiles();
+  const specialExists = await existsOnGitHub(PATHS.specialCurrent);
+
+  let nextRendered = false;
+  let specialMeta = null;
+
+  if (specialExists) {
+    try {
+      const wb = await fetchWB(PATHS.specialCurrent);
+      const aoa = firstSheetAOA(wb);
+      const { sermon, serviceDate } = parseMeta(wb, aoa);
+
+      $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
+      renderTable(aoa, "#next-setlist");
+      renderSermon("#next-sermon", sermon);
+      nextRendered = true;
+
+      let last = null;
+      if (serviceDate) {
+        const before = dated.filter(f => f.date < serviceDate);
+        last = before[before.length - 1] || null;
+      } else {
+        last = dated[dated.length - 1] || null;
+      }
+
+      if (last) {
+        $("#last-date").textContent = niceDate(last.date);
+        const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
+        const aoa2 = firstSheetAOA(wb2);
+        renderTable(aoa2, "#last-setlist");
+        const meta2 = parseMeta(wb2, aoa2);
+        renderSermon("#last-sermon", meta2.sermon);
+      } else {
+        $("#last-date").textContent = "—";
+        $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
+      }
+
+      specialMeta = { wb, aoa, serviceDate };
+    } catch {
+      nextRendered = false;
+    }
+  }
+
+  if (!nextRendered) {
+    if (dated.length === 0) {
+      $("#next-date").textContent = "No setlists yet.";
+      $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
+      $("#last-date").textContent = "—";
+      $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
+      return { dated, specialMeta };
+    }
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    let nextIdx = dated.findIndex(f => f.date >= today);
+    if (nextIdx === -1) nextIdx = dated.length - 1;
+
+    const next = dated[nextIdx];
+    const wb = await fetchWB(`${PATHS.setlistsDir}/${next.name}`);
+    const aoa = firstSheetAOA(wb);
+    renderTable(aoa, "#next-setlist");
+    $("#next-date").textContent = niceDate(next.date);
+    const meta = parseMeta(wb, aoa);
+    renderSermon("#next-sermon", meta.sermon);
+
+    const last = dated[nextIdx - 1] || (dated.length >= 2 ? dated[dated.length - 2] : null);
+    if (last) {
+      $("#last-date").textContent = niceDate(last.date);
+      const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
+      const aoa2 = firstSheetAOA(wb2);
+      renderTable(aoa2, "#last-setlist");
+      const meta2 = parseMeta(wb2, aoa2);
+      renderSermon("#last-sermon", meta2.sermon);
+    } else {
+      $("#last-date").textContent = "—";
+      $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
+    }
+  }
+
+  return { dated, specialMeta };
+}
+
+// ---- analytics (Current Year) ----
+async function buildAnalytics(dated, specialMeta){
+  const currentYear = new Date().getFullYear();
+  const datedThisYear = (dated || []).filter(
+    f => f.date && f.date.getFullYear() === currentYear
+  );
+
+  const songCounts = new Map();  // title -> plays
+  const songKeys   = new Map();  // title -> Set(keys)
+
+  async function accumulateFromWB(wb){
+    const aoa = firstSheetAOA(wb);
+    if(!aoa || aoa.length===0) return;
+    const headers = aoa[0].map(h => String(h).toLowerCase());
+    const ti = headers.indexOf("song") !== -1 ? headers.indexOf("song") : headers.indexOf("title");
+    const ki = headers.indexOf("key");
+    if(ti === -1) return;
+
+    for(const row of aoa.slice(1)){
+      const title = (row[ti] || "").toString().trim();
+      if(!title) continue;
+      const key = ki>=0 ? (row[ki] || "").toString().trim() : "";
+
+      songCounts.set(title, (songCounts.get(title)||0) + 1);
+      if(!songKeys.has(title)) songKeys.set(title, new Set());
+      if(key) songKeys.get(title).add(key);
+    }
+  }
+
+  // Include special "current" setlist if:
+  //  - it has a serviceDate in the current year, OR
+  //  - no date provided (assume current year to reflect newest songs)
+  const includeSpecial =
+    !!specialMeta && (
+      !specialMeta.serviceDate ||
+      specialMeta.serviceDate.getFullYear() === currentYear
+    );
+
+  if (datedThisYear.length === 0 && includeSpecial) {
+    await accumulateFromWB(specialMeta.wb);
+  } else {
+    for (const f of datedThisYear) {
+      const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
+      await accumulateFromWB(wb);
+    }
+    if (includeSpecial) {
+      await accumulateFromWB(specialMeta.wb);
+    }
+  }
+
+  if (songCounts.size === 0) {
+    $("#top5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
+    $("#library-table").innerHTML = `<p class="dim">No setlists found for ${currentYear}.</p>`;
     return;
   }
-  const topN = stats.freq.slice(0,10);
-  const labels = topN.map(d=>d[0]);
-  const values = topN.map(d=>d[1]);
 
-  upsertChart('barChart','bar',{
-    labels,
-    datasets:[{label:'Play Count (Top 10)', data: values}]
-  },{
-    responsive:true,
-    plugins:{legend:{display:false}},
-    scales:{y:{beginAtZero:true}}
-  });
+  const entries = Array.from(songCounts.entries());
+  entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
 
-  const pieN = stats.freq.slice(0,6);
-  upsertChart('pieChart','pie',{
-    labels: pieN.map(d=>d[0]),
-    datasets:[{label:'Top Share', data: pieN.map(d=>d[1])}]
-  },{responsive:true});
+  const top5 = entries.slice(0,5);
+  $("#top5").innerHTML = top5
+    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
+    .join("");
 
-  const tlLabels = stats.timeline.map(d=>d[0]);
-  const tlValues = stats.timeline.map(d=>d[1]);
-  upsertChart('lineChart','line',{
-    labels: tlLabels,
-    datasets:[{label:'Total Plays / Month', data: tlValues, tension: .25}]
-  },{
-    responsive:true,
-    plugins:{legend:{display:true}},
-    scales:{y:{beginAtZero:true}}
-  });
-}
+  const bottom5 = entries.slice().sort((a,b)=> a[1]-b[1] || a[0].localeCompare(b[0])).slice(0,5);
+  $("#bottom5").innerHTML = bottom5
+    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
+    .join("");
 
-// ---------- Main load ----------
-async function loadAll(){
-  const btn = $('loadBtn');
-  const status = $('status');
-  btn.disabled = true;
-  status.innerHTML = `<span class="loader"></span> Loading Excel files from GitHub…`;
-
-  const urls = {
-    announcements: $('annUrl').value.trim(),
-    bible: $('bibleUrl').value.trim(),
-    members: $('membersUrl').value.trim(),
-    setlist: $('setlistUrl').value.trim()
-  };
-
-  try{
-    const [ann, bible, members, setlist] = await Promise.all([
-      fetchSheet(urls.announcements),
-      fetchSheet(urls.bible),
-      fetchSheet(urls.members),
-      fetchSheet(urls.setlist)
-    ]);
-
-    // Tables + KPIs
-    setKpi('annKpi', `${ann.count} rows • sheet “${ann.sheetName}”`);
-    renderTable(ann.rows, 'annTable');
-
-    setKpi('bibleKpi', `${bible.count} rows • sheet “${bible.sheetName}”`);
-    renderTable(bible.rows, 'bibleTable');
-
-    setKpi('membersKpi', `${members.count} rows • sheet “${members.sheetName}”`);
-    renderTable(members.rows, 'membersTable');
-
-    setKpi('setlistKpi', `${setlist.count} rows • sheet “${setlist.sheetName}”`);
-    renderTable(setlist.rows, 'setlistTable');
-
-    // Analytics
-    const stats = buildSongStats(setlist.rows);
-    $('topSong').innerHTML = `Top song: <strong>${stats?.top?.[0] ?? '—'}</strong> (${stats?.top?.[1] ?? 0})`;
-    $('leastSong').innerHTML = `Least played: <strong>${stats?.least?.[0] ?? '—'}</strong> (${stats?.least?.[1] ?? 0})`;
-    $('totalPlays').innerHTML = `Total plays: <strong>${stats?.total ?? 0}</strong>`;
-    $('uniqueSongs').innerHTML = `Unique songs: <strong>${stats?.unique ?? 0}</strong>`;
-    drawCharts(stats);
-
-    status.innerHTML = `<span class="ok">Loaded successfully.</span>`;
-  }catch(err){
-    console.error(err);
-    status.innerHTML = `<span class="err">Load failed:</span> <span class="small">${escapeHtml(err.message)}</span><br>
-    <span class="small">Tip: Keep the repo public. This page auto-converts “blob” links to raw URLs.</span>`;
-  }finally{
-    btn.disabled = false;
+  // Library (current year)
+  const header = ["Song","Keys Used","Plays"];
+  let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
+  const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
+  for (const t of titles) {
+    const keysUsed = songKeys.get(t) ? Array.from(songKeys.get(t)).sort().join(", ") : "";
+    const plays = songCounts.get(t) || 0;
+    html += `<tr><td>${t}</td><td>${keysUsed}</td><td>${plays}</td></tr>`;
   }
+  html += "</table>";
+  $("#library-table").innerHTML = html;
 }
 
-// Wire up
-window.addEventListener('DOMContentLoaded', () => {
-  $('loadBtn').addEventListener('click', loadAll);
-  loadAll();
+// ---- boot ----
+document.addEventListener("DOMContentLoaded", async ()=>{
+  try{
+    await loadAnnouncements();
+    const { dated, specialMeta } = await loadSetlists();
+    await buildAnalytics(dated, specialMeta);
+  }catch(e){
+    console.error(e);
+    $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
+    $("#next-date").textContent = "—";
+    $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
+    $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
+    $("#top5").innerHTML = `<li class="dim">No data.</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
+    $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
+  }
 });
