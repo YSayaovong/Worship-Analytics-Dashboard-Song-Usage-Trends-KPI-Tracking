@@ -82,6 +82,12 @@ function renderAOATable(aoa, targetSel){
   el.innerHTML = html;
 }
 
+// Friendly fallback for missing labels
+const safeLabel = (s) => {
+  const v = String(s ?? "").trim();
+  return v || "Unknown";
+};
+
 /* =========================
    ANNOUNCEMENTS (bilingual if present)
 ========================= */
@@ -232,8 +238,13 @@ async function loadSetlistsAndAnalytics(){
       const top5 = sorted.slice(0,5);
       const bottom5 = sorted.slice(-5).reverse();
 
-      $("#top5").innerHTML = top5.length ? top5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
-      $("#bottom5").innerHTML = bottom5.length ? bottom5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
+      $("#top5").innerHTML = top5.length
+        ? top5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
+        : `<li class="dim">No data</li>`;
+
+      $("#bottom5").innerHTML = bottom5.length
+        ? bottom5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
+        : `<li class="dim">No data</li>`;
 
       drawPie(sorted.slice(0,7));
       drawBar(top5);
@@ -321,28 +332,103 @@ async function wikipediaOpenSearch(q){
 }
 
 /* =========================
-   Charts (pie & bar)
+   Charts (pie with %; bar colors by quarter)
 ========================= */
 let pieInst, barInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
+// PIE: show percentages in legend & tooltip
 function drawPie(entries){
   const ctx = $("#pieChart");
   destroyChart(pieInst);
+
+  const labels = entries.map(e => safeLabel(e[0]));
+  const data = entries.map(e => e[1]);
+  const total = data.reduce((a,b)=>a+(+b||0), 0) || 1;
+
   pieInst = new Chart(ctx, {
     type: "pie",
-    data: { labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]) }] },
-    options: { responsive:true, plugins:{ legend:{ position:"bottom" } } }
+    data: { labels, datasets:[{ data }] },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            generateLabels(chart){
+              // Base items (to keep color swatches)
+              const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              const ds   = chart.data.datasets[0]?.data || [];
+              const lbs  = chart.data.labels || [];
+              const sum  = ds.reduce((a,b)=>a+(+b||0),0) || 1;
+              return base.map((item, i) => {
+                const val = +ds[i] || 0;
+                const pct = Math.round((val/sum)*1000)/10; // 1 decimal
+                return { ...item, text: `${safeLabel(lbs[i])} — ${pct}%` };
+              });
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label(ctx){
+              const val = +ctx.parsed || 0;
+              const pct = Math.round((val/total)*1000)/10;
+              return `${safeLabel(ctx.label)}: ${val} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
   });
 }
 
+// BAR: quarter color cycle + safe labels
 function drawBar(entries){
   const ctx = $("#barChart");
   destroyChart(barInst);
+
+  const labels = entries.map(e => safeLabel(e[0]));
+  const data   = entries.map(e => e[1]);
+
+  // Quarter color cycle (Q1–Q4), then repeat
+  const quarterColors = [
+    "#4e79a7", // Q1
+    "#f28e2b", // Q2
+    "#e15759", // Q3
+    "#76b7b2"  // Q4
+  ];
+  const bg = labels.map((_, i) => quarterColors[i % 4]);
+  const border = bg;
+
   barInst = new Chart(ctx, {
     type: "bar",
-    data: { labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]) }] },
-    options: { responsive:true, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+    data: {
+      labels,
+      datasets: [{
+        label: "Plays",
+        data,
+        backgroundColor: bg,
+        borderColor: border,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title(items){
+              return items.length ? safeLabel(items[0].label) : "";
+            },
+            label(ctx){
+              return `Plays: ${+ctx.parsed.y || 0}`;
+            }
+          }
+        }
+      }
+    }
   });
 }
 
