@@ -1,20 +1,11 @@
-/* ================== CONFIG ================== */
-const OWNER  = "YSayaovong";
-const REPO   = "HFBC_Praise_Worship";
-const BRANCH = "main";
+/* ================== CONFIG: raw.githubusercontent.com ================== */
+const RAW_BASE = "https://raw.githubusercontent.com/YSayaovong/HFBC_Praise_Worship/main";
 const SHEETS = {
-  announcements: "announcements/announcements.xlsx",
-  bible:         "bible_study/bible_study.xlsx",
-  members:       "members/members.xlsx",
-  setlist:       "setlist/setlist.xlsx",
+  announcements: `${RAW_BASE}/announcements/announcements.xlsx`,
+  bible:         `${RAW_BASE}/bible_study/bible_study.xlsx`,
+  members:       `${RAW_BASE}/members/members.xlsx`,
+  setlist:       `${RAW_BASE}/setlist/setlist.xlsx`,
 };
-
-/* CDN mirrors for resilience */
-const cdnMirrors = [
-  (p)=>`https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@${BRANCH}/${p}`,
-  (p)=>`https://fastly.jsdelivr.net/gh/${OWNER}/${REPO}@${BRANCH}/${p}`,
-  (p)=>`https://gcore.jsdelivr.net/gh/${OWNER}/${REPO}@${BRANCH}/${p}`,
-];
 
 /* ================== UTILITIES ================== */
 const $  = s => document.querySelector(s);
@@ -28,51 +19,30 @@ function tableFromRows(headers, rows){
     : `<tr><td class="dim" colspan="${headers.length}">No data</td></tr>`;
   return `<table>${thead}<tbody>${body}</tbody></table>`;
 }
-
 function diag(msg){
   const box = $("#diag"); box.hidden = false;
-  const line = document.createElement("div");
-  line.textContent = msg;
+  const line = document.createElement("div"); line.textContent = msg;
   box.appendChild(line);
 }
 
-/* ================== Robust Excel loader ================== */
-async function loadExcel(path){
-  // Warn if opened as file://
-  if (location.protocol === "file:") {
-    diag("You opened index.html via file://. Please serve over HTTP(S) (GitHub Pages, Netlify, or `python -m http.server`).");
-  }
-  // Try mirrors
-  let lastErr;
-  for (const m of cdnMirrors) {
-    const url = m(path) + `?v=${Date.now()}`; // cache-buster
-    try {
-      const res = await fetch(url, {mode:"cors"});
-      if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-      const ab = await res.arrayBuffer();
-      return parseXLSX(ab);
-    } catch (e) {
-      lastErr = e;
-      diag(`CDN fetch failed: ${e.message}`);
-    }
-  }
-  // Fallback: GitHub API (base64)
-  try{
-    const api = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${BRANCH}`;
-    const r = await fetch(api, {headers:{Accept:"application/vnd.github+json"}});
-    if(!r.ok) throw new Error(`GitHub API ${r.status} ${api}`);
-    const j = await r.json();
-    const bin = Uint8Array.from(atob(j.content.replace(/\n/g,"")), c=>c.charCodeAt(0));
-    return parseXLSX(bin.buffer);
-  }catch(e){
-    diag(`GitHub API fallback failed: ${e.message}`);
-    throw lastErr || e;
-  }
+/* Warn if opened locally */
+if (location.protocol === "file:") {
+  diag("You opened index.html with file:// — browsers block cross-origin fetches. Please serve over HTTP(S) (GitHub Pages, Netlify, Vercel, or `python -m http.server`).");
 }
-function parseXLSX(ab){
-  const wb = XLSX.read(ab, {type:"array"});
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws, {defval:""});
+
+/* ================== Excel loader (raw.githubusercontent.com) ================== */
+async function loadExcel(url){
+  try{
+    const res = await fetch(url, {mode:"cors", cache:"no-store"});
+    if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    const ab = await res.arrayBuffer();
+    const wb = XLSX.read(ab, {type:"array"});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, {defval:""});
+  }catch(err){
+    diag(`Fetch failed: ${err.message}`);
+    return null;
+  }
 }
 
 /* ================== Wikipedia helpers ================== */
@@ -83,7 +53,7 @@ async function wikiSummary(title){
     const page = (sj[1] && sj[1][0]) ? sj[1][0] : title;
     const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page)}`);
     if(!r.ok) return null;
-    return await r.json(); // {title, extract}
+    return await r.json();
   }catch{ return null; }
 }
 function inferAuthors(title, extract){
@@ -99,37 +69,39 @@ function inferAuthors(title, extract){
 
 /* ================== HOME BLOCKS ================== */
 async function renderHomeBlocks(){
-  try{
-    const rows = await loadExcel(SHEETS.announcements);
+  // Announcements
+  let rows = await loadExcel(SHEETS.announcements);
+  if(rows){
     const a = rows.sort((x,y)=> new Date(y.Date||y.date) - new Date(x.Date||x.date))
                   .map(r=>[fmtDate(r.Date||r.date), r.Announcement || r.Text || ""]);
     $("#announcements-table").innerHTML = tableFromRows(["Date","Announcement"], a);
-  }catch(e){
+  }else{
     $("#announcements-table").innerHTML = `<div class="dim">Failed to load announcements.</div>`;
   }
 
-  try{
-    const rows = await loadExcel(SHEETS.bible);
-    const headers = Object.keys(rows[0]||{});
+  // Bible / reminders
+  rows = await loadExcel(SHEETS.bible);
+  if(rows && rows.length){
+    const headers = Object.keys(rows[0]);
     $("#bible-study-table").innerHTML = tableFromRows(headers, rows.map(r=> headers.map(h=> r[h])));
-  }catch(e){
+  }else{
     $("#bible-study-table").innerHTML = `<div class="dim">Failed to load reminders.</div>`;
   }
 
-  try{
-    const rows = await loadExcel(SHEETS.members);
+  // Members
+  rows = await loadExcel(SHEETS.members);
+  if(rows){
     const m = rows.map(r=>[ r.Name || r.NAME || "", r.Role || r.ROLE || "" ]);
     $("#members-table").innerHTML = tableFromRows(["Name","Role"], m);
-  }catch(e){
+  }else{
     $("#members-table").innerHTML = `<div class="dim">Failed to load members.</div>`;
   }
 }
 
 /* ================== SONGS & ANALYTICS ================== */
 async function renderSongs(){
-  let raw;
-  try{ raw = await loadExcel(SHEETS.setlist); }
-  catch(e){
+  const raw = await loadExcel(SHEETS.setlist);
+  if(!raw){
     $("#next-week-table").innerHTML = `<div class="dim">Failed to load setlist.</div>`;
     $("#last-week-table").innerHTML = `<div class="dim">Failed to load setlist.</div>`;
     return;
@@ -160,11 +132,10 @@ async function renderSongs(){
 
   if(nextDate){
     $("#next-date").textContent = fmtDate(nextDate);
-    const nextRows = sorted.filter(r=> r.Date===nextDate);
-    const enriched = await Promise.all(nextRows.map(enrich));
+    const e = await Promise.all(sorted.filter(r=>r.Date===nextDate).map(enrich));
     $("#next-week-table").innerHTML = tableFromRows(
       ["Date","Song","Author","Credit/Story","Topic"],
-      enriched.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
+      e.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
     );
   }else{
     $("#next-week-table").innerHTML = `<div class="dim">No upcoming set found.</div>`;
@@ -172,11 +143,10 @@ async function renderSongs(){
 
   if(lastDate){
     $("#last-date").textContent = fmtDate(lastDate);
-    const lastRows = sorted.filter(r=> r.Date===lastDate);
-    const enrichedL = await Promise.all(lastRows.map(enrich));
+    const e = await Promise.all(sorted.filter(r=>r.Date===lastDate).map(enrich));
     $("#last-week-table").innerHTML = tableFromRows(
       ["Date","Song","Author","Credit/Story","Topic"],
-      enrichedL.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
+      e.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
     );
   }else{
     $("#last-week-table").innerHTML = `<div class="dim">No prior week found.</div>`;
@@ -235,7 +205,7 @@ async function renderSongs(){
 
 /* ================== INIT ================== */
 (async function(){
-  $$("#year").forEach(el=> el.textContent = new Date().getFullYear());
   await renderHomeBlocks();
   await renderSongs();
+  $$("#year").forEach(el=> el.textContent = new Date().getFullYear());
 })();
