@@ -17,29 +17,30 @@
   </header>
 
   <main class="container">
-    <!-- Row 1: Announcements | Reminders -->
+    <!-- Row 1: Worship Practice | Worship Members -->
     <section id="top-grid" class="grid-2">
       <div class="card">
-        <h2 class="section-title">Announcements</h2>
-        <div id="announcements-table" class="table like-card">Loading announcements…</div>
-      </div>
-
-      <div class="card">
-        <h2 class="section-title">Reminders</h2>
+        <h2 class="section-title">Worship Practice</h2>
         <div id="reminders-table" class="table like-card">
+          <!-- Fallback content; replaced if reminders.xlsx exists -->
           <ul class="reminders">
             <li><strong>Thursday Practice</strong>: 6:00pm–8:00pm</li>
             <li><strong>Sunday Practice</strong>: 8:40am–9:30am</li>
           </ul>
         </div>
       </div>
-    </section>
 
-    <!-- Row 2: Members -->
-    <section id="members-section" class="section">
       <div class="card">
         <h2 class="section-title">Worship Team Members</h2>
         <div id="members-table" class="table like-card">Loading members…</div>
+      </div>
+    </section>
+
+    <!-- Row 2: Announcements (moved here) -->
+    <section id="announcements-section" class="section">
+      <div class="card">
+        <h2 class="section-title">Announcements</h2>
+        <div id="announcements-table" class="table like-card">Loading announcements…</div>
       </div>
     </section>
 
