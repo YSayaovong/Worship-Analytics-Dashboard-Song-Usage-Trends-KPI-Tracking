@@ -4,7 +4,7 @@ const GITHUB = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main
 const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
-  reminders: "reminders/reminders.xlsx", // optional; else we keep static two reminders
+  reminders: "reminders/reminders.xlsx", // optional
   setlist: "setlist/setlist.xlsx"
 };
 
@@ -22,12 +22,48 @@ async function fetchWB(pathRel){
   const res = await fetch(url);
   if(!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
   const ab = await res.arrayBuffer();
-  return XLSX.read(ab, { type: "array" });
+  return XLSX.read(ab, { type: "array", cellDates: true }); // let xlsx give us JS Dates when available
 }
 
 function aoaFromWB(wb){
   const ws = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+}
+
+// Robust Excel/JS/string date → local Date at midnight (prevents TZ shifts)
+function toLocalDate(val){
+  if(val == null || val === "") return null;
+
+  // 1) Already a JS Date
+  if (val instanceof Date && !isNaN(val)) {
+    return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+  }
+
+  // 2) Excel serial number
+  if (typeof val === "number") {
+    const o = XLSX.SSF.parse_date_code(val);
+    if (o && o.y && o.m && o.d) return new Date(o.y, o.m - 1, o.d);
+  }
+
+  // 3) Common string formats (m/d/yyyy, yyyy-mm-dd, etc.)
+  const s = String(val).trim();
+  const mdyyyy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/; // 10/4/2025 or 10-4-2025
+  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;       // 2025-10-04
+
+  let m;
+  if ((m = s.match(mdyyyy))) {
+    const M = +m[1], D = +m[2], Y = +m[3] < 100 ? 2000 + +m[3] : +m[3];
+    return new Date(Y, M - 1, D);
+  }
+  if ((m = s.match(ymd))) {
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+
+  // 4) Fallback to Date parser, then normalize to midnight local
+  const d = new Date(s);
+  if (!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  return null;
 }
 
 function renderAOATable(aoa, targetSel){
@@ -44,43 +80,24 @@ function renderAOATable(aoa, targetSel){
   el.innerHTML = html;
 }
 
-function parseDateLoose(val){
-  if(val == null) return null;
-  if(typeof val === "number"){
-    try{
-      const base = new Date(Date.UTC(1899,11,30));
-      const ms = val * 86400000;
-      return new Date(base.getTime() + ms);
-    }catch{ return null; }
-  }
-  const s = String(val).trim();
-  if(!s) return null;
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-}
-
 function sameYMD(a,b){ return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
-// ---------- LOADERS ----------
+// ---------- LOADERS (Announcements / Reminders / Members) ----------
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
     const aoa = aoaFromWB(wb);
-    // If first column is an Excel serial date, render formatted
+    // Format any "Date" column
     const hdr = aoa[0].map(x=>String(x).toLowerCase());
     const idxDate = hdr.findIndex(h=>["date","service date"].includes(h));
-    if(idxDate !== -1){
-      const out = aoa.map((row, i)=>{
-        if(i===0) return row;
-        const r = row.slice();
-        const d = parseDateLoose(r[idxDate]);
-        r[idxDate] = d ? fmtDate(d) : (r[idxDate] ?? "");
-        return r;
-      });
-      renderAOATable(out, "#announcements-table");
-    }else{
-      renderAOATable(aoa, "#announcements-table");
-    }
+    const out = idxDate === -1 ? aoa : aoa.map((row,i)=>{
+      if(i===0) return row;
+      const r = row.slice();
+      const d = toLocalDate(r[idxDate]);
+      r[idxDate] = d ? fmtDate(d) : (r[idxDate] ?? "");
+      return r;
+    });
+    renderAOATable(out, "#announcements-table");
   }catch(e){
     console.error(e);
     $("#announcements-table").innerHTML = `<p class="dim">Unable to load <code>${PATHS.announcements}</code>.</p>`;
@@ -108,7 +125,7 @@ async function loadMembers(){
   }
 }
 
-// ---------- SETLIST with sermon + two weeks + stories ----------
+// ---------- SETLIST (Two most recent dates; Sermon; Story toggle; NO "Key") ----------
 async function loadSetlistsAndAnalytics(){
   try{
     const wb = await fetchWB(PATHS.setlist);
@@ -120,40 +137,37 @@ async function loadSetlistsAndAnalytics(){
     const idxDate   = hdr.findIndex(h=>["date","service date"].includes(h));
     const idxSermon = hdr.findIndex(h=>["sermon","sermon topic","topic"].includes(h));
     const idxSong   = hdr.findIndex(h=>["song","title","song title"].includes(h));
-    const idxKey    = hdr.findIndex(h=>h==="key");
-    const idxNotes  = hdr.findIndex(h=>["notes","comment"].includes(h));
+    const idxNotes  = hdr.findIndex(h=>["notes","note","comment"].includes(h));
 
     const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
 
-    // Group rows by date
-    let groups = new Map(); // dateKey -> { date:Date|null, sermon?:string, rows:[] }
+    // Group rows by local date
+    const groups = new Map(); // key -> { date, sermon, rows:[] }
     for(const r of rows){
-      const d = idxDate !== -1 ? parseDateLoose(r[idxDate]) : null;
+      const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
       const key = d ? d.toISOString().slice(0,10) : "__nodate__";
       const sermon = idxSermon !== -1 ? String(r[idxSermon] ?? "").trim() : "";
       if(!groups.has(key)) groups.set(key, { date:d, sermon: sermon || "", rows:[] });
       const g = groups.get(key);
-      // keep first non-empty sermon seen for the date
       if(sermon && !g.sermon) g.sermon = sermon;
       g.rows.push(r);
     }
 
-    // Sort groups by date desc with nodate last
-    const arr = [...groups.entries()].sort((a,b)=>{
-      const da = a[1].date, db = b[1].date;
-      if(da && db) return db - da;
-      if(da && !db) return -1;
-      if(!da && db) return 1;
+    // Sort by date desc (nodate last)
+    const arr = [...groups.values()].sort((a,b)=>{
+      if(a.date && b.date) return b.date - a.date;
+      if(a.date && !b.date) return -1;
+      if(!a.date && b.date) return 1;
       return 0;
     });
 
-    const thisG = arr[0]?.[1];
-    const lastG = arr[1]?.[1];
+    const thisG = arr[0];
+    const lastG = arr[1];
 
-    renderSetlistGroup(thisG, "#setlist-this-meta", "#setlist-this", idxSong, idxKey, idxNotes);
-    renderSetlistGroup(lastG, "#setlist-last-meta", "#setlist-last", idxSong, idxKey, idxNotes);
+    renderSetlistGroup(thisG, "#setlist-this-meta", "#setlist-this", idxSong, idxNotes);
+    renderSetlistGroup(lastG, "#setlist-last-meta", "#setlist-last", idxSong, idxNotes);
 
-    // Analytics from all rows
+    // --- Analytics based on ALL rows ---
     if(idxSong !== -1){
       const counts = new Map();
       for(const r of rows){
@@ -167,7 +181,6 @@ async function loadSetlistsAndAnalytics(){
       $("#top5").innerHTML = top5.length ? top5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
       $("#bottom5").innerHTML = bottom5.length ? bottom5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
 
-      // Charts (pie top 7, bar top 5)
       drawPie(sorted.slice(0,7));
       drawBar(top5);
     }else{
@@ -181,40 +194,39 @@ async function loadSetlistsAndAnalytics(){
   }
 }
 
-function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxKey, idxNotes){
+function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxNotes){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
   $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
 
-  // Build minimal AOA
-  const header = ["Song","Key","Notes",""];
-  const rows = group.rows.map(r=>{
+  // Header WITHOUT "Key"
+  const header = ["Song","Notes",""];
+  // Build all rows for this date group
+  const rows = group.rows.map((r,i)=>{
     const song = idxSong !== -1 ? String(r[idxSong] ?? "") : "";
-    const key  = idxKey  !== -1 ? String(r[idxKey]  ?? "") : "";
-    const note = idxNotes!== -1 ? String(r[idxNotes]?? "") : "";
-    return [song, key, note, "story-slot"]; // placeholder token
+    const note = idxNotes !== -1 ? String(r[idxNotes] ?? "") : "";
+    return { song, note, i };
   });
 
-  // Render table then attach story buttons
+  // Render table + story toggles
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
-  rows.forEach((r, i)=>{
+  rows.forEach(({song,note,i})=>{
     html += `<tr>
-      <td>${escapeHtml(r[0])} <span class="story-btn" data-song="${escapeHtml(r[0])}" data-target="story-${i}">Story</span>
-          <div id="story-${i}" class="story" style="display:none;"></div>
+      <td>${escapeHtml(song)}
+        <span class="story-btn" data-song="${escapeHtml(song)}" data-target="story-${tableSel}-${i}">Story</span>
+        <div id="story-${tableSel}-${i}" class="story" style="display:none;"></div>
       </td>
-      <td>${escapeHtml(r[1])}</td>
-      <td>${escapeHtml(r[2])}</td>
+      <td>${escapeHtml(note)}</td>
       <td></td>
     </tr>`;
   });
   html += `</tbody></table>`;
   $(tableSel).innerHTML = html;
 
-  // Wire up story fetchers
+  // Wire story buttons
   $(tableSel).querySelectorAll(".story-btn").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
-      const target = btn.getAttribute("data-target");
+      const box = document.getElementById(btn.getAttribute("data-target"));
       const song = btn.getAttribute("data-song");
-      const box = document.getElementById(target);
       if(box.style.display==="none"){
         box.style.display = "block";
         box.innerHTML = `<span class="dim">Fetching story…</span>`;
@@ -230,23 +242,17 @@ function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxKey, idxNotes)
 // ---------- Song story (Wikipedia) ----------
 async function fetchSongStory(query){
   try{
-    // 1) try direct summary
     let summary = await wikipediaSummary(query);
     if(summary) return summary;
 
-    // 2) opensearch -> top title -> summary
     const alt = await wikipediaOpenSearch(query);
     if(alt){
       summary = await wikipediaSummary(alt);
       if(summary) return summary;
     }
-
-    // 3) Try with "(hymn)" suffix if looks like a hymn
     summary = await wikipediaSummary(`${query} (hymn)`);
     return summary || "";
-  }catch{
-    return "";
-  }
+  }catch{ return ""; }
 }
 
 async function wikipediaSummary(title){
@@ -254,8 +260,7 @@ async function wikipediaSummary(title){
   const res = await fetch(url, { headers:{ "accept":"application/json" } });
   if(!res.ok) return "";
   const j = await res.json();
-  if(j?.extract) return j.extract;
-  return "";
+  return j?.extract || "";
 }
 
 async function wikipediaOpenSearch(q){
@@ -263,11 +268,10 @@ async function wikipediaOpenSearch(q){
   const res = await fetch(url);
   if(!res.ok) return "";
   const j = await res.json();
-  const title = j?.[1]?.[0];
-  return title || "";
+  return j?.[1]?.[0] || "";
 }
 
-// ---------- Charts (pie & bar only) ----------
+// ---------- Charts (pie & bar) ----------
 let pieInst, barInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
