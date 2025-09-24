@@ -1,6 +1,6 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   (JS only, works with your existing HTML/CSS)
+   (No timestamp; dates include weekday)
 ========================= */
 
 /* ---------- CONFIG ---------- */
@@ -13,7 +13,7 @@ const PATHS = {
   special: "special_practice/special_practice.xlsx" // Special Practice (DATE | SPECIAL PRACTICE)
 };
 
-// Worship Practice (static times; dates roll forward every Thu/Sun at 12:00 AM)
+// Worship Practice (static times; roll forward every Thu/Sun at local 12:00 AM)
 const PRACTICE = {
   thursday: { dow: 4, time: "6:00pm–8:00pm" },
   sunday:   { dow: 0, time: "8:40am–9:30am" }
@@ -21,8 +21,17 @@ const PRACTICE = {
 
 /* ---------- UTIL ---------- */
 const $ = (sel, root=document) => root.querySelector(sel);
-const fmtDate = d => d ? d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" }) : "—";
-const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+
+// Include weekday in all dates: "Sunday, Sep 28, 2025"
+const fmtDate = d =>
+  d ? d.toLocaleDateString(undefined, {
+        weekday: "long", month: "short", day: "numeric", year: "numeric"
+      })
+    : "—";
+
+const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, m => ({
+  "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+}[m]));
 
 function todayLocalMidnight(){
   const t = new Date();
@@ -41,6 +50,7 @@ function aoaFromWB(wb){
   const ws = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
 }
+
 // Robust Excel/JS/string date → local midnight
 function toLocalDate(val){
   if(val == null || val === "") return null;
@@ -70,6 +80,7 @@ function toLocalDate(val){
   if (!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return null;
 }
+
 function renderAOATable(aoa, targetSel){
   const el = $(targetSel);
   if(!aoa || aoa.length === 0){ el.innerHTML = `<p class="dim">No data.</p>`; return; }
@@ -83,10 +94,12 @@ function renderAOATable(aoa, targetSel){
   html += `</tbody></table>`;
   el.innerHTML = html;
 }
+
 const safeLabel = (s) => {
   const v = String(s ?? "").trim();
   return v || "Unknown";
 };
+
 function findFirst(headers, candidates){
   for(const c of candidates){
     const i = headers.indexOf(c);
@@ -96,13 +109,13 @@ function findFirst(headers, candidates){
 }
 
 /* ---------- WORSHIP PRACTICE (table like Special Practice) ---------- */
-/* Shows always the NEXT Thursday and NEXT Sunday relative to today's midnight.
-   If today is Thu/Sun, it rolls to the FOLLOWING week. */
+/* Always show the NEXT Thursday and NEXT Sunday relative to today’s midnight.
+   If today is Thu or Sun, roll to the FOLLOWING week (post-midnight behavior). */
 function nextOccurrence(targetDow){
   const today = todayLocalMidnight();
   const wd = today.getDay();
   let delta = (targetDow - wd + 7) % 7;
-  if(delta === 0) delta = 7; // roll to following week when it's the same day
+  if(delta === 0) delta = 7; // roll a full week if same day
   const d = new Date(today);
   d.setDate(today.getDate() + delta);
   return d;
@@ -117,7 +130,8 @@ function loadPractice(){
 }
 
 /* ---------- SPECIAL PRACTICE (special_practice.xlsx) ---------- */
-/* Expects headers: DATE | SPECIAL PRACTICE (any case). Future-only. */
+/* Expects headers: DATE | SPECIAL PRACTICE (any case). Future-only.
+   Render as Date | Time (we map the sheet’s text into the “Time” column). */
 async function loadSpecialPractice(){
   try{
     const wb = await fetchWB(PATHS.special);
@@ -200,7 +214,7 @@ async function loadAnnouncements(){
       return;
     }
 
-    // Fallback: render entire sheet but format date if present
+    // Fallback: render whole sheet, format Date if present
     const out2 = idxDate === -1 ? aoa : aoa.map((r,i)=>{
       if(i===0) return r;
       const rr = r.slice();
@@ -358,7 +372,9 @@ async function loadSetlistsAndAnalytics(){
 }
 function renderSetlistGroup(group, metaSel, tableSel){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
-  $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
+  $(metaSel).textContent =
+    `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}` +
+    `${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
 
   const header = ["Song"];
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
