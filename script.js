@@ -1,45 +1,46 @@
 /* =========================
-   CONFIG
+   HFBC Praise & Worship — FULL script.js
+   (JS only, works with your existing HTML/CSS)
 ========================= */
+
+/* ---------- CONFIG ---------- */
 const GITHUB = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
-  reminders: "reminders/reminders.xlsx",   // optional; falls back to two static reminders
   setlist: "setlist/setlist.xlsx",
-  bible: "bible_study/bible_study.xlsx",   // last 4 weeks
+  bible: "bible_study/bible_study.xlsx",            // Weekly Bible Verses (last 4 weeks)
   special: "special_practice/special_practice.xlsx" // Special Practice (DATE | SPECIAL PRACTICE)
 };
 
-/* =========================
-   UTIL
-========================= */
+// Worship Practice (static times; dates roll forward every Thu/Sun at 12:00 AM)
+const PRACTICE = {
+  thursday: { dow: 4, time: "6:00pm–8:00pm" },
+  sunday:   { dow: 0, time: "8:40am–9:30am" }
+};
+
+/* ---------- UTIL ---------- */
 const $ = (sel, root=document) => root.querySelector(sel);
 const fmtDate = d => d ? d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" }) : "—";
-const escapeHtml = s => s.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
 
 function todayLocalMidnight(){
   const t = new Date();
   return new Date(t.getFullYear(), t.getMonth(), t.getDate());
 }
-
 function rawUrl(pathRel){
   return `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/${GITHUB.branch}/${pathRel}`;
 }
-
 async function fetchWB(pathRel){
-  const url = rawUrl(pathRel) + `?nocache=${Date.now()}`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  const res = await fetch(rawUrl(pathRel) + `?nocache=${Date.now()}`);
+  if(!res.ok) throw new Error(`Fetch failed: ${pathRel} (${res.status})`);
   const ab = await res.arrayBuffer();
   return XLSX.read(ab, { type: "array", cellDates: true });
 }
-
 function aoaFromWB(wb){
   const ws = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
 }
-
 // Robust Excel/JS/string date → local midnight
 function toLocalDate(val){
   if(val == null || val === "") return null;
@@ -54,7 +55,7 @@ function toLocalDate(val){
 
   const s = String(val).trim();
   const mdyyyy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/;
-  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;
+  const ymd    = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;
 
   let m;
   if ((m = s.match(mdyyyy))) {
@@ -69,7 +70,6 @@ function toLocalDate(val){
   if (!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return null;
 }
-
 function renderAOATable(aoa, targetSel){
   const el = $(targetSel);
   if(!aoa || aoa.length === 0){ el.innerHTML = `<p class="dim">No data.</p>`; return; }
@@ -77,21 +77,16 @@ function renderAOATable(aoa, targetSel){
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(String(h))}</th>`).join("")}</tr></thead><tbody>`;
   for(let i=1;i<aoa.length;i++){
     const row = aoa[i];
-    if(row.every(c=>String(c).trim()==="")) continue;
+    if(!row || row.every(c=>String(c).trim()==="")) continue;
     html += `<tr>${header.map((_,j)=>`<td>${escapeHtml(String(row[j] ?? ""))}</td>`).join("")}</tr>`;
   }
   html += `</tbody></table>`;
   el.innerHTML = html;
 }
-
 const safeLabel = (s) => {
   const v = String(s ?? "").trim();
   return v || "Unknown";
 };
-
-/* =========================
-   ANNOUNCEMENTS (bilingual if present)
-========================= */
 function findFirst(headers, candidates){
   for(const c of candidates){
     const i = headers.indexOf(c);
@@ -100,6 +95,78 @@ function findFirst(headers, candidates){
   return -1;
 }
 
+/* ---------- WORSHIP PRACTICE (table like Special Practice) ---------- */
+/* Shows always the NEXT Thursday and NEXT Sunday relative to today's midnight.
+   If today is Thu/Sun, it rolls to the FOLLOWING week. */
+function nextOccurrence(targetDow){
+  const today = todayLocalMidnight();
+  const wd = today.getDay();
+  let delta = (targetDow - wd + 7) % 7;
+  if(delta === 0) delta = 7; // roll to following week when it's the same day
+  const d = new Date(today);
+  d.setDate(today.getDate() + delta);
+  return d;
+}
+function loadPractice(){
+  const rows = [
+    ["Date","Time"],
+    [fmtDate(nextOccurrence(PRACTICE.thursday.dow)), PRACTICE.thursday.time],
+    [fmtDate(nextOccurrence(PRACTICE.sunday.dow)),   PRACTICE.sunday.time],
+  ];
+  renderAOATable(rows, "#reminders-table");
+}
+
+/* ---------- SPECIAL PRACTICE (special_practice.xlsx) ---------- */
+/* Expects headers: DATE | SPECIAL PRACTICE (any case). Future-only. */
+async function loadSpecialPractice(){
+  try{
+    const wb = await fetchWB(PATHS.special);
+    const aoa = aoaFromWB(wb);
+    if(!aoa || aoa.length < 2){
+      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
+      return;
+    }
+    const hdrRaw = aoa[0].map(h => String(h).trim());
+    const hdr = hdrRaw.map(h => h.toLowerCase());
+    const idxDate = findFirst(hdr, ["date","service date","practice date"]);
+    const idxText = findFirst(hdr, ["special practice","special_practice","details","time","reason","notes","note","description","desc","title","topic"]);
+
+    const today = todayLocalMidnight();
+    const seen = new Set();
+    const items = [];
+
+    for(let i=1;i<aoa.length;i++){
+      const r = aoa[i]; if(!r) continue;
+      const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+      if(!d || d < today) continue;
+
+      let text = idxText !== -1 ? String(r[idxText] ?? "").trim() : "";
+      if(!text){
+        text = String(r.find((cell, j) => j !== idxDate && String(cell ?? "").trim() !== "") ?? "").trim();
+      }
+      if(!text) continue;
+
+      const key = `${d.getTime()}|${text.toLowerCase()}`;
+      if(seen.has(key)) continue; seen.add(key);
+      items.push({ date: d, text });
+    }
+    items.sort((a,b)=> a.date - b.date);
+
+    if(items.length === 0){
+      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
+      return;
+    }
+
+    const out = [["Date","Time"]];
+    items.forEach(it => out.push([fmtDate(it.date), it.text]));
+    renderAOATable(out, "#special-practice-table");
+  }catch(e){
+    console.error(e);
+    $("#special-practice-table").innerHTML = `<p class="dim">Unable to load special practices.</p>`;
+  }
+}
+
+/* ---------- ANNOUNCEMENTS (bilingual if two columns) ---------- */
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
@@ -108,7 +175,6 @@ async function loadAnnouncements(){
 
     const hdrRaw = aoa[0].map(h => String(h).trim());
     const hdr = hdrRaw.map(h => h.toLowerCase());
-
     const idxDate = hdr.findIndex(h => ["date","service date"].includes(h));
     const idxEn = findFirst(hdr, ["english","announcement en","announcement (en)","announcement english","en","message en"]);
     const idxHm = findFirst(hdr, ["hmong","announcement hm","announcement (hmong)","announcement hmong","hm","message hm"]);
@@ -121,8 +187,7 @@ async function loadAnnouncements(){
       out.push(head);
 
       for(let i=1;i<aoa.length;i++){
-        const r = aoa[i]; if(!r) continue;
-        if(r.every(c => String(c ?? "").trim()==="")) continue;
+        const r = aoa[i]; if(!r || r.every(c => String(c ?? "").trim()==="")) continue;
         const row = [];
         if(idxDate !== -1){
           const d = toLocalDate(r[idxDate]);
@@ -135,6 +200,7 @@ async function loadAnnouncements(){
       return;
     }
 
+    // Fallback: render entire sheet but format date if present
     const out2 = idxDate === -1 ? aoa : aoa.map((r,i)=>{
       if(i===0) return r;
       const rr = r.slice();
@@ -149,87 +215,7 @@ async function loadAnnouncements(){
   }
 }
 
-/* =========================
-   SPECIAL PRACTICE (from special_practice.xlsx)
-   Supports headers: DATE | SPECIAL PRACTICE
-   - Future dates only (>= today)
-   - Shows Date + Details
-   - Deduplicates by date+details
-========================= */
-async function loadSpecialPractice(){
-  try{
-    const wb = await fetchWB(PATHS.special);
-    const aoa = aoaFromWB(wb);
-    if(!aoa || aoa.length < 2){
-      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
-      return;
-    }
-
-    // Normalize headers
-    const hdrRaw = aoa[0].map(h => String(h).trim());
-    const hdr = hdrRaw.map(h => h.toLowerCase());
-
-    // Column indices
-    const idxDate  = findFirst(hdr, ["date","service date","practice date"]);
-    const idxText  = findFirst(hdr, [
-      "special practice","special_practice","practice","details","reason","notes","note","description","desc","title","topic"
-    ]);
-
-    const today = todayLocalMidnight();
-    const seen = new Set();
-    const items = [];
-
-    for(let i=1;i<aoa.length;i++){
-      const r = aoa[i]; if(!r) continue;
-
-      const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-      if(!d || d < today) continue; // only upcoming
-
-      let text = idxText !== -1 ? String(r[idxText] ?? "").trim() : "";
-      if(!text){
-        // fallback: first non-empty non-date cell
-        text = String(r.find((cell, j) => j !== idxDate && String(cell ?? "").trim() !== "") ?? "").trim();
-      }
-      if(!text) continue;
-
-      const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}|${text.toLowerCase()}`;
-      if(seen.has(key)) continue;
-      seen.add(key);
-
-      items.push({ date: d, text });
-    }
-
-    items.sort((a,b)=> a.date - b.date);
-
-    if(items.length === 0){
-      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
-      return;
-    }
-
-    const out = [["Date","Details"]];
-    for(const it of items){
-      out.push([fmtDate(it.date), it.text]);
-    }
-    renderAOATable(out, "#special-practice-table");
-  }catch(e){
-    console.error(e);
-    $("#special-practice-table").innerHTML = `<p class="dim">Unable to load special practices.</p>`;
-  }
-}
-
-/* =========================
-   WORSHIP PRACTICE / MEMBERS
-========================= */
-async function loadReminders(){
-  try{
-    const wb = await fetchWB(PATHS.reminders);
-    const aoa = aoaFromWB(wb);
-    renderAOATable(aoa, "#reminders-table");
-  }catch(e){
-    /* fallback stays */
-  }
-}
-
+/* ---------- MEMBERS ---------- */
 async function loadMembers(){
   try{
     const wb = await fetchWB(PATHS.members);
@@ -241,9 +227,7 @@ async function loadMembers(){
   }
 }
 
-/* =========================
-   WEEKLY BIBLE VERSES (last 4 weeks)
-========================= */
+/* ---------- WEEKLY BIBLE VERSES (last 4 weeks) ---------- */
 async function loadBibleVerses(){
   try{
     const wb = await fetchWB(PATHS.bible);
@@ -299,9 +283,7 @@ async function loadBibleVerses(){
   }
 }
 
-/* =========================
-   SETLIST (Coming Up / Previous) — NO "Notes"
-========================= */
+/* ---------- SETLISTS (Coming Up / Previous) + Analytics ---------- */
 async function loadSetlistsAndAnalytics(){
   try{
     const wb = await fetchWB(PATHS.setlist);
@@ -314,7 +296,7 @@ async function loadSetlistsAndAnalytics(){
     const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
     const idxSong   = findFirst(hdr, ["song","title","song title"]);
 
-    const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
+    const rows = aoa.slice(1).filter(r => r && r.some(c => String(c).trim()!==""));
 
     // Group by date (only rows with a song)
     const groups = [];
@@ -343,7 +325,7 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // --- Analytics from ALL rows (by song) ---
+    // Analytics (counts per song)
     if(idxSong !== -1){
       const counts = new Map();
       for(const r of rows){
@@ -374,12 +356,10 @@ async function loadSetlistsAndAnalytics(){
     $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
   }
 }
-
 function renderSetlistGroup(group, metaSel, tableSel){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
   $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
 
-  // Columns: Song (with Story toggle)
   const header = ["Song"];
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
   group.rows.forEach((row, i)=>{
@@ -411,9 +391,7 @@ function renderSetlistGroup(group, metaSel, tableSel){
   });
 }
 
-/* =========================
-   Song story (Wikipedia)
-========================= */
+/* ---------- Song story (Wikipedia) ---------- */
 async function fetchSongStory(query){
   try{
     let summary = await wikipediaSummary(query);
@@ -428,29 +406,24 @@ async function fetchSongStory(query){
     return summary || "";
   }catch{ return ""; }
 }
-
 async function wikipediaSummary(title){
-  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-  const res = await fetch(url, { headers:{ "accept":"application/json" } });
+  const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers:{ "accept":"application/json" } });
   if(!res.ok) return "";
   const j = await res.json();
   return j?.extract || "";
 }
-
 async function wikipediaOpenSearch(q){
-  const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=1&namespace=0&format=json&origin=*`;
-  const res = await fetch(url);
+  const res = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=1&namespace=0&format=json&origin=*`);
   if(!res.ok) return "";
   const j = await res.json();
   return j?.[1]?.[0] || "";
 }
 
-/* =========================
-   Charts (pie with %; bar colors by quarter)
-========================= */
+/* ---------- Charts (pie with %; bar colors by quarter) ---------- */
 let pieInst, barInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
+// PIE
 function drawPie(entries){
   const ctx = $("#pieChart");
   destroyChart(pieInst);
@@ -495,6 +468,7 @@ function drawPie(entries){
   });
 }
 
+// BAR
 function drawBar(entries){
   const ctx = $("#barChart");
   destroyChart(barInst);
@@ -502,22 +476,13 @@ function drawBar(entries){
   const labels = entries.map(e => safeLabel(e[0]));
   const data   = entries.map(e => e[1]);
 
-  const quarterColors = ["#4e79a7","#f28e2b","#e15759","#76b7b2"];
+  const quarterColors = ["#4e79a7","#f28e2b","#e15759","#76b7b2"]; // cycle Q1–Q4
   const bg = labels.map((_, i) => quarterColors[i % 4]);
   const border = bg;
 
   barInst = new Chart(ctx, {
     type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        label: "Plays",
-        data,
-        backgroundColor: bg,
-        borderColor: border,
-        borderWidth: 1
-      }]
-    },
+    data: { labels, datasets: [{ label: "Plays", data, backgroundColor: bg, borderColor: border, borderWidth: 1 }] },
     options: {
       responsive: true,
       scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
@@ -533,16 +498,12 @@ function drawBar(entries){
   });
 }
 
-/* =========================
-   BOOT
-========================= */
+/* ---------- BOOT ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  try{ await loadReminders(); }catch(e){ /* ignore */ }
-  try{ await loadMembers(); }catch(e){ console.error(e); $("#members-table").innerHTML = `<p class="dim">Error loading members.</p>`; }
-
-  try{ await loadSpecialPractice(); }catch(e){ console.error(e); $("#special-practice-table").innerHTML = `<p class="dim">Error.</p>`; }
-  try{ await loadAnnouncements(); }catch(e){ console.error(e); $("#announcements-table").innerHTML = `<p class="dim">Error loading announcements.</p>`; }
-
-  try{ await loadBibleVerses(); }catch(e){ console.error(e); $("#bible-verse-table").innerHTML = `<p class="dim">Error loading verses.</p>`; }
-  try{ await loadSetlistsAndAnalytics(); }catch(e){ console.error(e); $("#setlist-next").innerHTML = `<p class="dim">Error.</p>`; }
+  loadPractice(); // render computed Thursday/Sunday table
+  try{ await loadMembers(); }catch{}
+  try{ await loadSpecialPractice(); }catch{}
+  try{ await loadAnnouncements(); }catch{}
+  try{ await loadBibleVerses(); }catch{}
+  try{ await loadSetlistsAndAnalytics(); }catch{}
 });
