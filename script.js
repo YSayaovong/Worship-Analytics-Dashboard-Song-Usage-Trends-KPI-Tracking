@@ -6,7 +6,8 @@ const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
   reminders: "reminders/reminders.xlsx",   // optional; falls back to two static reminders
-  setlist: "setlist/setlist.xlsx"
+  setlist: "setlist/setlist.xlsx",
+  bible: "bible_study/bible_study.xlsx"    // weekly bible verses (last 4 weeks)
 };
 
 /* =========================
@@ -157,7 +158,87 @@ async function loadAnnouncements(){
 }
 
 /* =========================
-   REMINDERS / MEMBERS
+   SPECIAL PRACTICE (from Announcements)
+   - Future dates only (>= today)
+   - Only items mentioning "practice"/"rehearsal"
+   - Show Date + short Reason (no detail)
+   - Deduplicate by date+reason
+========================= */
+function extractReason(text){
+  if(!text) return "";
+  let t = String(text).replace(/\s+/g," ").trim();
+  // remove time ranges like "from 6:30pm - 8:30pm"
+  t = t.replace(/\b(?:from|at)\s+\d{1,2}:\d{2}\s?(?:am|pm)\s?(?:-|to)?\s?\d{0,2}:?\d{0,2}\s?(?:am|pm)?/gi, "");
+  // try to capture phrase after "for", "because", "due to"
+  let m = t.match(/\bfor (the |our )?([^.;,]+)/i) || t.match(/\bbecause of ([^.;,]+)/i) || t.match(/\bdue to ([^.;,]+)/i);
+  let reason = m ? m[m.length-1].trim() : "";
+  if(!reason){
+    // fallback: take a short fragment around keywords like anniversary, retreat, youth
+    const hint = t.match(/\b(anniversary|retreat|conference|wedding|baptism|communion|banquet|fundraiser|outreach)\b[^.;,]*/i);
+    if(hint) reason = hint[0].trim();
+  }
+  if(!reason){
+    // last fallback: take first ~8 words
+    reason = t.split(/[.]/)[0].split(/\s+/).slice(0,8).join(" ");
+  }
+  // clean & cap length
+  reason = reason.replace(/^the\s+/i,"").trim();
+  if(reason.length > 80) reason = reason.slice(0,77) + "…";
+  return reason;
+}
+
+async function loadSpecialPractice(){
+  try{
+    const wb = await fetchWB(PATHS.announcements);
+    const aoa = aoaFromWB(wb);
+    if(!aoa || aoa.length < 2){ $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`; return; }
+
+    const hdrRaw = aoa[0].map(h => String(h).trim());
+    const hdr = hdrRaw.map(h => h.toLowerCase());
+    const idxDate = hdr.findIndex(h => ["date","service date"].includes(h));
+    const idxEn   = findFirst(hdr, ["english","announcement en","announcement (en)","announcement english","en","message en"]);
+    const idxHm   = findFirst(hdr, ["hmong","announcement hm","announcement (hmong)","announcement hmong","hm","message hm"]);
+
+    const today = todayLocalMidnight();
+    const seen = new Set();
+    const items = [];
+
+    for(let i=1;i<aoa.length;i++){
+      const r = aoa[i]; if(!r) continue;
+      const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+      if(!d || d < today) continue; // future only
+
+      const en = idxEn !== -1 ? String(r[idxEn] ?? "") : "";
+      const hm = idxHm !== -1 ? String(r[idxHm] ?? "") : "";
+      const combined = `${en} ${hm}`.toLowerCase();
+      if(!/practice|rehearsal/.test(combined)) continue; // only practice items
+
+      const reason = extractReason(en || hm);
+      const key = `${d.toISOString().slice(0,10)}|${reason.toLowerCase()}`;
+      if(seen.has(key)) continue;
+      seen.add(key);
+
+      items.push({ date: d, reason });
+    }
+
+    items.sort((a,b)=> a.date - b.date);
+
+    if(items.length === 0){
+      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
+      return;
+    }
+
+    const out = [["Date","Reason"]];
+    items.forEach(it => out.push([fmtDate(it.date), it.reason]));
+    renderAOATable(out, "#special-practice-table");
+  }catch(e){
+    console.error(e);
+    $("#special-practice-table").innerHTML = `<p class="dim">Unable to load special practices.</p>`;
+  }
+}
+
+/* =========================
+   WORSHIP PRACTICE / MEMBERS
 ========================= */
 async function loadReminders(){
   try{
@@ -181,7 +262,68 @@ async function loadMembers(){
 }
 
 /* =========================
-   SETLIST (Coming Up / Previous) + Analytics
+   WEEKLY BIBLE VERSES (last 4 weeks)
+========================= */
+async function loadBibleVerses(){
+  try{
+    const wb = await fetchWB(PATHS.bible);
+    const aoa = aoaFromWB(wb);
+    if(!aoa || aoa.length < 2){ $("#bible-verse-table").innerHTML = `<p class="dim">No verses found.</p>`; return; }
+
+    const hdrRaw = aoa[0].map(h=>String(h));
+    const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
+    const idxDate  = hdr.findIndex(h=>["date","service date"].includes(h));
+    const idxVerse = hdr.findIndex(h=>["verse","bible verse","scripture","scripture text"].includes(h));
+    const idxRef   = hdr.findIndex(h=>["reference","passage","scripture reference","book/chapter","book chapter"].includes(h));
+    const idxTopic = hdr.findIndex(h=>["topic","title"].includes(h));
+
+    const rows = aoa.slice(1)
+      .filter(r => r && r.some(c => String(c).trim()!==""))
+      .map(r => {
+        const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+        const verse = idxVerse !== -1 ? String(r[idxVerse] ?? "").trim()
+                   : idxTopic !== -1 ? String(r[idxTopic] ?? "").trim()
+                   : "";
+        const ref = idxRef !== -1 ? String(r[idxRef] ?? "").trim() : "";
+        return { date: d, verse, ref };
+      })
+      .filter(x => x.date && (x.verse || x.ref));
+
+    const today = todayLocalMidnight();
+    const fourWeeksAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 28);
+
+    let recent = rows
+      .filter(x => x.date >= fourWeeksAgo && x.date <= today)
+      .sort((a,b)=> b.date - a.date)
+      .slice(0,4);
+
+    if(recent.length === 0){
+      recent = rows
+        .filter(x => x.date <= today)
+        .sort((a,b)=> b.date - a.date)
+        .slice(0,4);
+    }
+
+    if(recent.length === 0){
+      $("#bible-verse-table").innerHTML = `<p class="dim">No verses in the last 4 weeks.</p>`;
+      return;
+    }
+
+    const showRef = recent.some(x => x.ref);
+    const header = showRef ? ["Date","Verse","Reference"] : ["Date","Verse"];
+    const out = [header];
+    for(const r of recent){
+      out.push(showRef ? [fmtDate(r.date), r.verse || r.ref || "", r.ref] : [fmtDate(r.date), r.verse || r.ref || ""]);
+    }
+    renderAOATable(out, "#bible-verse-table");
+  }catch(e){
+    console.error(e);
+    $("#bible-verse-table").innerHTML = `<p class="dim">Unable to load <code>${PATHS.bible}</code>.</p>`;
+  }
+}
+
+/* =========================
+   SETLIST (Coming Up / Previous) — NO "Notes"
 ========================= */
 async function loadSetlistsAndAnalytics(){
   try{
@@ -194,7 +336,7 @@ async function loadSetlistsAndAnalytics(){
     const idxDate   = hdr.findIndex(h=>["date","service date"].includes(h));
     const idxSermon = hdr.findIndex(h=>["sermon","sermon topic","topic"].includes(h));
     const idxSong   = hdr.findIndex(h=>["song","title","song title"].includes(h));
-    const idxNotes  = hdr.findIndex(h=>["notes","note","comment"].includes(h));
+    // Notes intentionally removed
 
     const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
 
@@ -203,7 +345,6 @@ async function loadSetlistsAndAnalytics(){
     for(const r of rows){
       const date = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
       const song = idxSong !== -1 ? String(r[idxSong] ?? "").trim() : "";
-      const notes = idxNotes !== -1 ? String(r[idxNotes] ?? "") : "";
       const sermon = idxSermon !== -1 ? String(r[idxSermon] ?? "").trim() : "";
       if(!song) continue;
 
@@ -214,20 +355,19 @@ async function loadSetlistsAndAnalytics(){
         groups.push(g);
       }
       if(sermon && !g.sermon) g.sermon = sermon;
-      g.rows.push({ song, notes });
+      g.rows.push({ song });
     }
 
     const dated = groups.filter(g=>g.date).sort((a,b)=> a.date - b.date);
     const today = todayLocalMidnight();
 
-    // Coming Up: earliest future date; Previous: latest date ≤ today
     const next = dated.find(g => g.date > today) || null;
     const prev = [...dated].filter(g => g.date <= today).slice(-1)[0] || null;
 
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // --- Analytics from ALL rows ---
+    // --- Analytics from ALL rows (by song) ---
     if(idxSong !== -1){
       const counts = new Map();
       for(const r of rows){
@@ -263,18 +403,16 @@ function renderSetlistGroup(group, metaSel, tableSel){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
   $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
 
-  // Columns: Song | Notes | Story
-  const header = ["Song","Notes",""];
+  // Columns: Song (with Story toggle)
+  const header = ["Song"];
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
   group.rows.forEach((row, i)=>{
     const id = `${tableSel.replace("#","")}-story-${i}`;
     html += `<tr>
       <td>${escapeHtml(row.song)}
-        <span class="story-btn" data-song="${escapeHtml(row.song)}" data-target="${id}">Story</span>
+        <span class="story-btn" style="margin-left:8px" data-song="${escapeHtml(row.song)}" data-target="${id}">Story</span>
         <div id="${id}" class="story" style="display:none;"></div>
       </td>
-      <td>${escapeHtml(row.notes)}</td>
-      <td></td>
     </tr>`;
   });
   html += `</tbody></table>`;
@@ -356,7 +494,6 @@ function drawPie(entries){
           position: "bottom",
           labels: {
             generateLabels(chart){
-              // Base items (to keep color swatches)
               const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
               const ds   = chart.data.datasets[0]?.data || [];
               const lbs  = chart.data.labels || [];
@@ -391,7 +528,6 @@ function drawBar(entries){
   const labels = entries.map(e => safeLabel(e[0]));
   const data   = entries.map(e => e[1]);
 
-  // Quarter color cycle (Q1–Q4), then repeat
   const quarterColors = [
     "#4e79a7", // Q1
     "#f28e2b", // Q2
@@ -436,8 +572,12 @@ function drawBar(entries){
    BOOT
 ========================= */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  try{ await loadAnnouncements(); }catch(e){ console.error(e); $("#announcements-table").innerHTML = `<p class="dim">Error loading announcements.</p>`; }
   try{ await loadReminders(); }catch(e){ /* ignore */ }
   try{ await loadMembers(); }catch(e){ console.error(e); $("#members-table").innerHTML = `<p class="dim">Error loading members.</p>`; }
+
+  try{ await loadSpecialPractice(); }catch(e){ console.error(e); $("#special-practice-table").innerHTML = `<p class="dim">Error.</p>`; }
+  try{ await loadAnnouncements(); }catch(e){ console.error(e); $("#announcements-table").innerHTML = `<p class="dim">Error loading announcements.</p>`; }
+
+  try{ await loadBibleVerses(); }catch(e){ console.error(e); $("#bible-verse-table").innerHTML = `<p class="dim">Error loading verses.</p>`; }
   try{ await loadSetlistsAndAnalytics(); }catch(e){ console.error(e); $("#setlist-next").innerHTML = `<p class="dim">Error.</p>`; }
 });

@@ -36,6 +36,10 @@ html,body{
 }
 .mt16{ margin-top:16px; }
 
+/* compact look for Worship Practice */
+.compact-card{ padding:12px; }
+.compact-like-card{ padding:6px !important; }
+
 .like-card{ background:#0f1620; border:1px solid var(--border); border-radius:12px; padding:8px; }
 
 .table table{ width:100%; border-collapse:collapse; }
