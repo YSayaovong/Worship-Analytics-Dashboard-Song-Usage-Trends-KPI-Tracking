@@ -1,364 +1,284 @@
-/* Hmong First Baptist Church – Praise & Worship
-   Static site (no backend) powered by Excel files on GitHub.
-
-   Reads weekly content:
-     • /setlist/setlist.xlsx           (preferred "This Coming Week")
-     • /setlists/YYYY-MM-DD.xlsx       (archive, used for Last Week & analytics)
-     • /announcements/announcements.xlsx
-*/
-
-// ---- repo config ----
-const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
-const PATHS = {
-  specialCurrent: "setlist/setlist.xlsx",
-  setlistsDir: "setlists",
-  announcements: "announcements/announcements.xlsx"
+// ---------- CONFIG ----------
+// Your public repo details (adjust if you rename or move)
+const GITHUB = {
+  owner: "YSayaovong",
+  repo: "HFBC_Praise_Worship",
+  branch: "main"
 };
 
-// ---- basic helpers ----
-const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
-const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
-const $ = (s) => document.querySelector(s);
+// Relative paths inside the repo
+const PATHS = {
+  announcements: "announcements/announcements.xlsx",
+  members: "members/members.xlsx",
+  setlist: "setlist/setlist.xlsx" // expected to contain multiple rows; first sheet, header row
+};
 
-async function existsOnGitHub(path){
-  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
-  return r.ok;
+// ---------- HELPERS ----------
+const $ = (sel, root=document) => root.querySelector(sel);
+
+function rawUrl(pathRel){
+  // Build raw.githubusercontent URL
+  return `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/${GITHUB.branch}/${pathRel}`;
 }
-async function listDir(path){
-  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
-  if(!r.ok) return [];
-  return r.json();
-}
-async function fetchWB(path){
-  const r = await fetch(rawURL(path));
-  if(!r.ok) throw new Error(`Fetch error ${r.status} for ${path}`);
-  const ab = await r.arrayBuffer();
+
+async function fetchWB(pathRel){
+  const url = rawUrl(pathRel) + `?nocache=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  const ab = await res.arrayBuffer();
   return XLSX.read(ab, { type: "array" });
 }
-function firstSheetAOA(wb){
-  const sh = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sh, { header:1, defval:"" });
-}
-function toDateFromName(name){ // 2025-10-05.xlsx
-  const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
-  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
-}
-function niceDate(d){
-  return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); // "Sep 20, 2025"
+
+function sheetToAOA(wb){
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" }); // array of arrays
 }
 
-// ---- Excel date + text helpers ----
-function excelSerialToDate(val){
-  if (typeof val === "number") {
-    const o = XLSX.SSF.parse_date_code(val);
-    if (o) return new Date(o.y, o.m - 1, o.d);
-  }
-  if (typeof val === "string" && val.trim() !== "") {
-    const num = Number(val);
-    if (!Number.isNaN(num)) {
-      const o = XLSX.SSF.parse_date_code(num);
-      if (o) return new Date(o.y, o.m - 1, o.d);
-    }
-    const d = new Date(val);
-    if (!Number.isNaN(d)) return d;
-  }
-  return null;
-}
-function normalizeAnnouncementText(s){
-  let out = String(s ?? "");
-  out = out.replace(/:(?=\d)/g, ": "); // add space after ":" before a digit
-  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2"); // word then date
-  return out.trim();
-}
-
-// ---- smart table renderer (formats DATE columns) ----
-function renderTable(aoa, targetSel){
+function renderAOATable(aoa, targetSel){
   const el = $(targetSel);
-  if(!el){ return; }
-  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
-
-  const headers = (aoa[0] || []).map(h => String(h));
-  const dateCols = new Set();
-  headers.forEach((h,i)=>{ if(/date/i.test(h)) dateCols.add(i); });
-
-  function prettyDateCell(v){
-    const d = excelSerialToDate(v) || new Date(v);
-    return (d && !isNaN(d)) ? niceDate(d) : String(v);
+  if(!aoa || aoa.length === 0){
+    el.innerHTML = `<p class="dim">No data found.</p>`;
+    return;
   }
-
-  let html = "<table>";
-  aoa.forEach((row,rIdx)=>{
-    html += "<tr>";
-    row.forEach((cell,cIdx)=>{
-      let out = String(cell);
-      if(rIdx>0 && dateCols.has(cIdx)) out = prettyDateCell(cell);
-      html += (rIdx===0? `<th>${out}</th>` : `<td>${out}</td>`);
-    });
-    html += "</tr>";
-  });
-  html += "</table>";
+  let html = `<table><thead><tr>`;
+  const header = aoa[0];
+  header.forEach(h => html += `<th>${escapeHtml(String(h))}</th>`);
+  html += `</tr></thead><tbody>`;
+  for(let i=1;i<aoa.length;i++){
+    const row = aoa[i];
+    // Skip completely empty rows
+    if(row.every(cell => String(cell).trim() === "")) continue;
+    html += `<tr>` + header.map((_, cIdx)=>`<td>${escapeHtml(String(row[cIdx] ?? ""))}</td>`).join("") + `</tr>`;
+  }
+  html += `</tbody></table>`;
   el.innerHTML = html;
 }
 
-function renderSermon(targetSel, sermon){
-  const el = $(targetSel);
-  el.textContent = sermon ? `Sermon: ${sermon}` : "";
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[m]));
 }
 
-// ---- parse Meta/columns for Sermon/Date ----
-function parseMeta(wb, aoa){
-  let sermon="", serviceDate=null;
-
-  if(wb.Sheets["Meta"]){
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
-    for(const r of rows){
-      const k = String(r[0]||"").toLowerCase();
-      const v = r[1] || "";
-      if(k==="sermon")  sermon = v || sermon;
-      if(k==="date" || k==="servicedate" || k==="service date"){
-        const d = excelSerialToDate(v) || new Date(v);
-        if(!isNaN(d)) serviceDate = d;
-      }
-    }
-  }
-  if(aoa && aoa[0]){
-    const hdr = aoa[0].map(h=>String(h).toLowerCase());
-    const sIdx = hdr.indexOf("sermon");
-    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date")
-               : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
-    if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
-    if(!serviceDate && dIdx>=0){
-      const d = excelSerialToDate(aoa[1]?.[dIdx]) || new Date(aoa[1]?.[dIdx]);
-      if(!isNaN(d)) serviceDate = d;
-    }
-  }
-  return { sermon, serviceDate };
-}
-
-// ---- announcements ----
+// ---------- LOADERS ----------
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
-    const aoa = firstSheetAOA(wb);
-    if(aoa.length===0){ $("#announcements-table").textContent = "No announcements."; return; }
-
-    const headers = aoa[0].map(h => String(h));
-    const dateIdx = headers.findIndex(h => /date/i.test(h));
-    const textIdx = headers.findIndex(h => /(announcement|details?)/i.test(h));
-    const idxDate = dateIdx >= 0 ? dateIdx : 0;
-    const idxText = textIdx >= 0 ? textIdx : 1;
-
-    const rows = aoa.slice(1)
-      .filter(r => r.some(c => String(c).trim()!==""))
-      .map(r => {
-        const d = excelSerialToDate(r[idxDate]) || new Date(r[idxDate]);
-        const ds = (!isNaN(d)) ? niceDate(d) : String(r[idxDate]);
-        const txt = normalizeAnnouncementText(r[idxText] || "");
-        return { d: (!isNaN(d) ? d : null), ds, txt };
-      });
-
-    rows.sort((a,b)=>{
-      if(a.d && b.d) return b.d - a.d;
-      if(a.d) return -1;
-      if(b.d) return 1;
-      return 0;
-    });
-
-    const pretty = [["DATE","ANNOUNCEMENT"], ...rows.map(r => [r.ds, r.txt])];
-    renderTable(pretty, "#announcements-table");
-  }catch(e){
-    $("#announcements-table").innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Title/Announcement | Details.</p>`;
+    const aoa = sheetToAOA(wb);
+    renderAOATable(aoa, "#announcements-table");
+  }catch(err){
+    console.error("Announcements error:", err);
+    $("#announcements-table").innerHTML =
+      `<p class="dim">Unable to load <code>${PATHS.announcements}</code>. Ensure the file exists and is public.</p>`;
   }
 }
 
-// ---- setlists (This Coming Week & Last Week) ----
-async function getDatedFiles(){
-  const items = await listDir(PATHS.setlistsDir);
-  return items
-    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
-    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-    .sort((a,b)=> a.date - b.date); // oldest -> newest
-}
-
-async function loadSetlists(){
-  const dated = await getDatedFiles();
-  const specialExists = await existsOnGitHub(PATHS.specialCurrent);
-
-  let nextRendered = false;
-  let specialMeta = null;
-
-  if (specialExists) {
-    try {
-      const wb = await fetchWB(PATHS.specialCurrent);
-      const aoa = firstSheetAOA(wb);
-      const { sermon, serviceDate } = parseMeta(wb, aoa);
-
-      $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
-      renderTable(aoa, "#next-setlist");
-      renderSermon("#next-sermon", sermon);
-      nextRendered = true;
-
-      let last = null;
-      if (serviceDate) {
-        const before = dated.filter(f => f.date < serviceDate);
-        last = before[before.length - 1] || null;
-      } else {
-        last = dated[dated.length - 1] || null;
-      }
-
-      if (last) {
-        $("#last-date").textContent = niceDate(last.date);
-        const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
-        const aoa2 = firstSheetAOA(wb2);
-        renderTable(aoa2, "#last-setlist");
-        const meta2 = parseMeta(wb2, aoa2);
-        renderSermon("#last-sermon", meta2.sermon);
-      } else {
-        $("#last-date").textContent = "—";
-        $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
-      }
-
-      specialMeta = { wb, aoa, serviceDate };
-    } catch {
-      nextRendered = false;
-    }
-  }
-
-  if (!nextRendered) {
-    if (dated.length === 0) {
-      $("#next-date").textContent = "No setlists yet.";
-      $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
-      $("#last-date").textContent = "—";
-      $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-      return { dated, specialMeta };
-    }
-
-    const today = new Date(); today.setHours(0,0,0,0);
-    let nextIdx = dated.findIndex(f => f.date >= today);
-    if (nextIdx === -1) nextIdx = dated.length - 1;
-
-    const next = dated[nextIdx];
-    const wb = await fetchWB(`${PATHS.setlistsDir}/${next.name}`);
-    const aoa = firstSheetAOA(wb);
-    renderTable(aoa, "#next-setlist");
-    $("#next-date").textContent = niceDate(next.date);
-    const meta = parseMeta(wb, aoa);
-    renderSermon("#next-sermon", meta.sermon);
-
-    const last = dated[nextIdx - 1] || (dated.length >= 2 ? dated[dated.length - 2] : null);
-    if (last) {
-      $("#last-date").textContent = niceDate(last.date);
-      const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
-      const aoa2 = firstSheetAOA(wb2);
-      renderTable(aoa2, "#last-setlist");
-      const meta2 = parseMeta(wb2, aoa2);
-      renderSermon("#last-sermon", meta2.sermon);
-    } else {
-      $("#last-date").textContent = "—";
-      $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
-    }
-  }
-
-  return { dated, specialMeta };
-}
-
-// ---- analytics (Current Year) ----
-async function buildAnalytics(dated, specialMeta){
-  const currentYear = new Date().getFullYear();
-  const datedThisYear = (dated || []).filter(
-    f => f.date && f.date.getFullYear() === currentYear
-  );
-
-  const songCounts = new Map();  // title -> plays
-  const songKeys   = new Map();  // title -> Set(keys)
-
-  async function accumulateFromWB(wb){
-    const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length===0) return;
-    const headers = aoa[0].map(h => String(h).toLowerCase());
-    const ti = headers.indexOf("song") !== -1 ? headers.indexOf("song") : headers.indexOf("title");
-    const ki = headers.indexOf("key");
-    if(ti === -1) return;
-
-    for(const row of aoa.slice(1)){
-      const title = (row[ti] || "").toString().trim();
-      if(!title) continue;
-      const key = ki>=0 ? (row[ki] || "").toString().trim() : "";
-
-      songCounts.set(title, (songCounts.get(title)||0) + 1);
-      if(!songKeys.has(title)) songKeys.set(title, new Set());
-      if(key) songKeys.get(title).add(key);
-    }
-  }
-
-  // Include special "current" setlist if:
-  //  - it has a serviceDate in the current year, OR
-  //  - no date provided (assume current year to reflect newest songs)
-  const includeSpecial =
-    !!specialMeta && (
-      !specialMeta.serviceDate ||
-      specialMeta.serviceDate.getFullYear() === currentYear
-    );
-
-  if (datedThisYear.length === 0 && includeSpecial) {
-    await accumulateFromWB(specialMeta.wb);
-  } else {
-    for (const f of datedThisYear) {
-      const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
-      await accumulateFromWB(wb);
-    }
-    if (includeSpecial) {
-      await accumulateFromWB(specialMeta.wb);
-    }
-  }
-
-  if (songCounts.size === 0) {
-    $("#top5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
-    $("#bottom5").innerHTML = `<li class="dim">No data yet for ${currentYear}.</li>`;
-    $("#library-table").innerHTML = `<p class="dim">No setlists found for ${currentYear}.</p>`;
-    return;
-  }
-
-  const entries = Array.from(songCounts.entries());
-  entries.sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
-
-  const top5 = entries.slice(0,5);
-  $("#top5").innerHTML = top5
-    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
-    .join("");
-
-  const bottom5 = entries.slice().sort((a,b)=> a[1]-b[1] || a[0].localeCompare(b[0])).slice(0,5);
-  $("#bottom5").innerHTML = bottom5
-    .map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`)
-    .join("");
-
-  // Library (current year)
-  const header = ["Song","Keys Used","Plays"];
-  let html = "<table><tr>" + header.map(h=>`<th>${h}</th>`).join("") + "</tr>";
-  const titles = Array.from(songCounts.keys()).sort((a,b)=> a.localeCompare(b));
-  for (const t of titles) {
-    const keysUsed = songKeys.get(t) ? Array.from(songKeys.get(t)).sort().join(", ") : "";
-    const plays = songCounts.get(t) || 0;
-    html += `<tr><td>${t}</td><td>${keysUsed}</td><td>${plays}</td></tr>`;
-  }
-  html += "</table>";
-  $("#library-table").innerHTML = html;
-}
-
-// ---- boot ----
-document.addEventListener("DOMContentLoaded", async ()=>{
+async function loadMembers(){
   try{
-    await loadAnnouncements();
-    const { dated, specialMeta } = await loadSetlists();
-    await buildAnalytics(dated, specialMeta);
-  }catch(e){
-    console.error(e);
-    $("#announcements-table").innerHTML = `<p class="dim">Unable to load announcements. Ensure <code>${PATHS.announcements}</code> exists.</p>`;
-    $("#next-date").textContent = "—";
-    $("#next-setlist").innerHTML = `<p class="dim">Unable to load setlists. Ensure files exist in <code>${PATHS.setlistsDir}/</code> or <code>${PATHS.specialCurrent}</code>.</p>`;
-    $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-    $("#top5").innerHTML = `<li class="dim">No data.</li>`;
-    $("#bottom5").innerHTML = `<li class="dim">No data.</li>`;
-    $("#library-table").innerHTML = `<p class="dim">No data.</p>`;
+    const wb = await fetchWB(PATHS.members);
+    const aoa = sheetToAOA(wb);
+    renderAOATable(aoa, "#members-table");
+  }catch(err){
+    console.error("Members error:", err);
+    $("#members-table").innerHTML =
+      `<p class="dim">Unable to load <code>${PATHS.members}</code>. Ensure the file exists and is public.</p>`;
   }
+}
+
+async function loadSetlistAndAnalytics(){
+  try{
+    const wb = await fetchWB(PATHS.setlist);
+    const aoa = sheetToAOA(wb);
+    if(!aoa || aoa.length < 2){
+      $("#setlist-table").innerHTML = `<p class="dim">No setlist rows found.</p>`;
+      return;
+    }
+
+    // Try to detect common headers
+    const headers = aoa[0].map(h => String(h).trim().toLowerCase());
+    const idxDate = headers.findIndex(h => ["date","service date"].includes(h));
+    const idxSong = headers.findIndex(h => ["song","title","song title"].includes(h));
+    const idxKey  = headers.findIndex(h => h === "key");
+    const idxNotes = headers.findIndex(h => ["notes","comment"].includes(h));
+
+    // Render the visible "This Week" by taking the most recent date if Date column exists,
+    // otherwise just render all rows after header.
+    let rows = aoa.slice(1).filter(r => r.some(cell => String(cell).trim() !== ""));
+    if(idxDate !== -1){
+      // Parse dates and group by date
+      const parsed = rows.map(r => ({
+        date: parseDateLoose(r[idxDate]),
+        row: r
+      })).filter(o => o.date !== null);
+
+      // Get latest date
+      if(parsed.length){
+        const latestDate = parsed.reduce((a,b)=> (a.date > b.date ? a : b)).date;
+        const latestRows = parsed.filter(o => sameYMD(o.date, latestDate)).map(o => o.row);
+
+        // Build a display AOA
+        const displayHeader = [];
+        if(idxSong !== -1) displayHeader.push("Song");
+        if(idxKey  !== -1) displayHeader.push("Key");
+        if(idxNotes!== -1) displayHeader.push("Notes");
+
+        const displayRows = latestRows.map(r => {
+          const out = [];
+          if(idxSong !== -1) out.push(r[idxSong] ?? "");
+          if(idxKey  !== -1) out.push(r[idxKey]  ?? "");
+          if(idxNotes!== -1) out.push(r[idxNotes]?? "");
+          return out;
+        });
+
+        $("#setlist-meta").textContent = `Service Date: ${latestDate.toLocaleDateString()}`;
+        renderAOATable([displayHeader, ...displayRows], "#setlist-table");
+      }else{
+        // Fallback: render entire sheet
+        renderAOATable(aoa, "#setlist-table");
+      }
+    }else{
+      // No date col: render entire sheet
+      $("#setlist-meta").textContent = "";
+      renderAOATable(aoa, "#setlist-table");
+    }
+
+    // ----- Analytics -----
+    // Count plays per song (across the whole sheet)
+    if(idxSong !== -1){
+      const counts = new Map();
+      const perDate = new Map(); // dateStr -> count rows that day
+      for(const r of rows){
+        const title = String(r[idxSong] ?? "").trim();
+        if(title){
+          counts.set(title, (counts.get(title) || 0) + 1);
+        }
+        if(idxDate !== -1){
+          const d = parseDateLoose(r[idxDate]);
+          if(d){
+            const key = d.toISOString().slice(0,10);
+            perDate.set(key, (perDate.get(key)||0)+1);
+          }
+        }
+      }
+
+      // Top/Bottom 5
+      const sorted = [...counts.entries()].sort((a,b)=> b[1]-a[1]);
+      const top5 = sorted.slice(0,5);
+      const bottom5 = sorted.slice(-5).reverse();
+
+      $("#top5").innerHTML = top5.length ? top5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
+      $("#bottom5").innerHTML = bottom5.length ? bottom5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
+
+      // Charts
+      drawPieChart(sorted.slice(0,7)); // top 7 for readability
+      drawBarChart(top5);
+      drawLineChart([...perDate.entries()].sort((a,b)=> a[0].localeCompare(b[0])));
+    }else{
+      $("#top5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
+      $("#bottom5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
+    }
+
+  }catch(err){
+    console.error("Setlist error:", err);
+    $("#setlist-table").innerHTML =
+      `<p class="dim">Unable to load <code>${PATHS.setlist}</code>. Ensure the file exists and is public.</p>`;
+    $("#top5").innerHTML = `<li class="dim">No data</li>`;
+    $("#bottom5").innerHTML = `<li class="dim">No data</li>`;
+  }
+}
+
+// ---------- Date helpers ----------
+function parseDateLoose(val){
+  if(val == null) return null;
+  // If Excel serial date
+  if(typeof val === "number"){
+    try{
+      return XLSX.SSF.parse_date_code(val)
+        ? excelSerialToDate(val)
+        : null;
+    }catch{ return null; }
+  }
+  // Try native Date parsing
+  const s = String(val).trim();
+  if(!s) return null;
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function excelSerialToDate(serial){
+  // Excel serial to JS Date (assuming 1900 system)
+  const utc_days  = Math.floor(serial - 25569);
+  const utc_value = utc_days * 86400; // seconds
+  const date_info = new Date(utc_value * 1000);
+  const fractional_day = serial - Math.floor(serial) + 1e-7;
+  let totalSeconds = Math.floor(86400 * fractional_day);
+  const seconds = totalSeconds % 60;
+  totalSeconds = Math.floor(totalSeconds / 60);
+  const minutes = totalSeconds % 60;
+  const hours = Math.floor(totalSeconds / 60);
+  date_info.setHours(hours, minutes, seconds);
+  return date_info;
+}
+
+function sameYMD(a,b){
+  return a.getFullYear()===b.getFullYear() &&
+         a.getMonth()===b.getMonth() &&
+         a.getDate()===b.getDate();
+}
+
+// ---------- Charts ----------
+let pieInst, barInst, lineInst;
+
+function destroyChart(inst){
+  if(inst){ inst.destroy(); }
+}
+
+function drawPieChart(entries){
+  const ctx = $("#pieChart");
+  destroyChart(pieInst);
+  const labels = entries.map(([s])=>s);
+  const data = entries.map(([,c])=>c);
+  pieInst = new Chart(ctx, {
+    type: "pie",
+    data: { labels, datasets: [{ data }] },
+    options: { responsive: true, plugins:{ legend:{ position:"bottom" } } }
+  });
+}
+
+function drawBarChart(entries){
+  const ctx = $("#barChart");
+  destroyChart(barInst);
+  const labels = entries.map(([s])=>s);
+  const data = entries.map(([,c])=>c);
+  barInst = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: [{ data }] },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision:0 } } }
+    }
+  });
+}
+
+function drawLineChart(datePairs){
+  const ctx = $("#lineChart");
+  destroyChart(lineInst);
+  const labels = datePairs.map(([d])=>d);
+  const data = datePairs.map(([,c])=>c);
+  lineInst = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets: [{ data, tension: 0.2, fill:false }] },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision:0 } } }
+    }
+  });
+}
+
+// ---------- BOOT ----------
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadAnnouncements();
+  await loadMembers();
+  await loadSetlistAndAnalytics();
 });
