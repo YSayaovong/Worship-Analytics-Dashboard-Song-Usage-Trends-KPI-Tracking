@@ -17,16 +17,23 @@
   </header>
 
   <main class="container">
-    <!-- Row 1: Worship Practice | Worship Members -->
+    <!-- Row 1: left column = Worship Practice + Special Practice (stacked); right column = Members -->
     <section id="top-grid" class="grid-2">
-      <div class="card compact-card">
-        <h2 class="section-title">Worship Practice</h2>
-        <div id="reminders-table" class="table like-card compact-like-card">
-          <!-- Fallback content; replaced if reminders.xlsx exists -->
-          <ul class="reminders">
-            <li><strong>Thursday Practice</strong>: 6:00pm–8:00pm</li>
-            <li><strong>Sunday Practice</strong>: 8:40am–9:30am</li>
-          </ul>
+      <div class="left-stack">
+        <div class="card compact-card">
+          <h2 class="section-title">Worship Practice</h2>
+          <div id="reminders-table" class="table like-card compact-like-card">
+            <!-- Fallback content; replaced if reminders.xlsx exists -->
+            <ul class="reminders">
+              <li><strong>Thursday Practice</strong>: 6:00pm–8:00pm</li>
+              <li><strong>Sunday Practice</strong>: 8:40am–9:30am</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card mt16">
+          <h2 class="section-title">Special Practice</h2>
+          <div id="special-practice-table" class="table like-card">Loading…</div>
         </div>
       </div>
 
@@ -36,15 +43,7 @@
       </div>
     </section>
 
-    <!-- NEW Row: Special Practice (between Practice and Announcements) -->
-    <section id="special-practice-section" class="section">
-      <div class="card">
-        <h2 class="section-title">Special Practice</h2>
-        <div id="special-practice-table" class="table like-card">Looking for upcoming items…</div>
-      </div>
-    </section>
-
-    <!-- Row: Announcements -->
+    <!-- Row 2: Announcements -->
     <section id="announcements-section" class="section">
       <div class="card">
         <h2 class="section-title">Announcements</h2>
@@ -52,7 +51,7 @@
       </div>
     </section>
 
-    <!-- Row: Weekly Bible Verses (Last 4 Weeks) -->
+    <!-- Row 3: Weekly Bible Verses (Last 4 Weeks) -->
     <section id="bible-section" class="section">
       <div class="card">
         <h2 class="section-title">Weekly Bible Verses (Last 4 Weeks)</h2>
@@ -60,7 +59,7 @@
       </div>
     </section>
 
-    <!-- Row: Setlists (Coming Up / Previous) -->
+    <!-- Row 4: Setlists (Coming Up / Previous) -->
     <section id="setlist-section" class="section">
       <div class="card">
         <h2 class="section-title">Coming Up Set</h2>
@@ -75,7 +74,7 @@
       </div>
     </section>
 
-    <!-- Row: Analytics -->
+    <!-- Row 5: Analytics -->
     <section id="analytics-section" class="section">
       <div class="card">
         <h2 class="section-title">Song Analytics</h2>
@@ -107,7 +106,7 @@
 
   <footer class="site-footer">
     <div class="container dim">
-      <small>Data sources: announcements.xlsx, members.xlsx, (optional) reminders.xlsx, setlist.xlsx, bible_study.xlsx — public on GitHub.</small>
+      <small>Data sources: announcements.xlsx, members.xlsx, (optional) reminders.xlsx, setlist.xlsx, bible_study.xlsx, special_practice.xlsx — public on GitHub.</small>
     </div>
   </footer>
 

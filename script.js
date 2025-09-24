@@ -7,7 +7,8 @@ const PATHS = {
   members: "members/members.xlsx",
   reminders: "reminders/reminders.xlsx",   // optional; falls back to two static reminders
   setlist: "setlist/setlist.xlsx",
-  bible: "bible_study/bible_study.xlsx"    // weekly bible verses (last 4 weeks)
+  bible: "bible_study/bible_study.xlsx",   // last 4 weeks
+  special: "special_practice/special_practice.xlsx" // NEW: special practice
 };
 
 /* =========================
@@ -39,7 +40,7 @@ function aoaFromWB(wb){
   return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
 }
 
-// Robust Excel/JS/string date → local midnight (no TZ drift)
+// Robust Excel/JS/string date → local midnight
 function toLocalDate(val){
   if(val == null || val === "") return null;
 
@@ -83,7 +84,6 @@ function renderAOATable(aoa, targetSel){
   el.innerHTML = html;
 }
 
-// Friendly fallback for missing labels
 const safeLabel = (s) => {
   const v = String(s ?? "").trim();
   return v || "Unknown";
@@ -110,16 +110,9 @@ async function loadAnnouncements(){
     const hdr = hdrRaw.map(h => h.toLowerCase());
 
     const idxDate = hdr.findIndex(h => ["date","service date"].includes(h));
+    const idxEn = findFirst(hdr, ["english","announcement en","announcement (en)","announcement english","en","message en"]);
+    const idxHm = findFirst(hdr, ["hmong","announcement hm","announcement (hmong)","announcement hmong","hm","message hm"]);
 
-    // English / Hmong column detection (common variations)
-    const idxEn = findFirst(hdr, [
-      "english","announcement en","announcement (en)","announcement english","en","message en"
-    ]);
-    const idxHm = findFirst(hdr, [
-      "hmong","announcement hm","announcement (hmong)","announcement hmong","hm","message hm"
-    ]);
-
-    // If both present → render as Date | English | Hmong (Date optional)
     if(idxEn !== -1 && idxHm !== -1){
       const out = [];
       const head = [];
@@ -142,7 +135,6 @@ async function loadAnnouncements(){
       return;
     }
 
-    // Fallback: render whole sheet; format Date if present
     const out2 = idxDate === -1 ? aoa : aoa.map((r,i)=>{
       if(i===0) return r;
       const rr = r.slice();
@@ -158,46 +150,32 @@ async function loadAnnouncements(){
 }
 
 /* =========================
-   SPECIAL PRACTICE (from Announcements)
+   SPECIAL PRACTICE (from special_practice.xlsx)
    - Future dates only (>= today)
-   - Only items mentioning "practice"/"rehearsal"
-   - Show Date + short Reason (no detail)
+   - Show Date + Reason
    - Deduplicate by date+reason
 ========================= */
-function extractReason(text){
-  if(!text) return "";
-  let t = String(text).replace(/\s+/g," ").trim();
-  // remove time ranges like "from 6:30pm - 8:30pm"
-  t = t.replace(/\b(?:from|at)\s+\d{1,2}:\d{2}\s?(?:am|pm)\s?(?:-|to)?\s?\d{0,2}:?\d{0,2}\s?(?:am|pm)?/gi, "");
-  // try to capture phrase after "for", "because", "due to"
-  let m = t.match(/\bfor (the |our )?([^.;,]+)/i) || t.match(/\bbecause of ([^.;,]+)/i) || t.match(/\bdue to ([^.;,]+)/i);
-  let reason = m ? m[m.length-1].trim() : "";
-  if(!reason){
-    // fallback: take a short fragment around keywords like anniversary, retreat, youth
-    const hint = t.match(/\b(anniversary|retreat|conference|wedding|baptism|communion|banquet|fundraiser|outreach)\b[^.;,]*/i);
-    if(hint) reason = hint[0].trim();
-  }
-  if(!reason){
-    // last fallback: take first ~8 words
-    reason = t.split(/[.]/)[0].split(/\s+/).slice(0,8).join(" ");
-  }
-  // clean & cap length
-  reason = reason.replace(/^the\s+/i,"").trim();
-  if(reason.length > 80) reason = reason.slice(0,77) + "…";
-  return reason;
-}
-
 async function loadSpecialPractice(){
   try{
-    const wb = await fetchWB(PATHS.announcements);
+    const wb = await fetchWB(PATHS.special);
     const aoa = aoaFromWB(wb);
-    if(!aoa || aoa.length < 2){ $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`; return; }
+    if(!aoa || aoa.length < 2){
+      $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
+      return;
+    }
 
     const hdrRaw = aoa[0].map(h => String(h).trim());
     const hdr = hdrRaw.map(h => h.toLowerCase());
-    const idxDate = hdr.findIndex(h => ["date","service date"].includes(h));
-    const idxEn   = findFirst(hdr, ["english","announcement en","announcement (en)","announcement english","en","message en"]);
-    const idxHm   = findFirst(hdr, ["hmong","announcement hm","announcement (hmong)","announcement hmong","hm","message hm"]);
+
+    const idxDate = findFirst(hdr, ["date","service date","practice date"]);
+    // Try to find a single "reason" column; fallbacks cover common names
+    let idxReason = findFirst(hdr, [
+      "reason","purpose","summary","title","topic","desc","description","note","notes","why","details"
+    ]);
+
+    // If bilingual columns exist, prefer English first, else Hmong
+    const idxEn = findFirst(hdr, ["english","reason en","en"]);
+    const idxHm = findFirst(hdr, ["hmong","reason hm","hm"]);
 
     const today = todayLocalMidnight();
     const seen = new Set();
@@ -206,14 +184,19 @@ async function loadSpecialPractice(){
     for(let i=1;i<aoa.length;i++){
       const r = aoa[i]; if(!r) continue;
       const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-      if(!d || d < today) continue; // future only
+      if(!d || d < today) continue;
 
-      const en = idxEn !== -1 ? String(r[idxEn] ?? "") : "";
-      const hm = idxHm !== -1 ? String(r[idxHm] ?? "") : "";
-      const combined = `${en} ${hm}`.toLowerCase();
-      if(!/practice|rehearsal/.test(combined)) continue; // only practice items
+      let reason = "";
+      if(idxReason !== -1) reason = String(r[idxReason] ?? "").trim();
+      else if(idxEn !== -1 || idxHm !== -1){
+        reason = String((idxEn !== -1 ? r[idxEn] : "") || (idxHm !== -1 ? r[idxHm] : "") || "").trim();
+      } else {
+        // fallback: first non-empty, non-date cell
+        const firstText = r.find((cell, j) => j !== idxDate && String(cell ?? "").trim() !== "");
+        reason = String(firstText ?? "").trim();
+      }
+      if(!reason) continue;
 
-      const reason = extractReason(en || hm);
       const key = `${d.toISOString().slice(0,10)}|${reason.toLowerCase()}`;
       if(seen.has(key)) continue;
       seen.add(key);
@@ -222,7 +205,6 @@ async function loadSpecialPractice(){
     }
 
     items.sort((a,b)=> a.date - b.date);
-
     if(items.length === 0){
       $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
       return;
@@ -246,7 +228,7 @@ async function loadReminders(){
     const aoa = aoaFromWB(wb);
     renderAOATable(aoa, "#reminders-table");
   }catch(e){
-    // keep static fallback silently
+    /* fallback stays */
   }
 }
 
@@ -272,18 +254,15 @@ async function loadBibleVerses(){
 
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
-    const idxDate  = hdr.findIndex(h=>["date","service date"].includes(h));
-    const idxVerse = hdr.findIndex(h=>["verse","bible verse","scripture","scripture text"].includes(h));
-    const idxRef   = hdr.findIndex(h=>["reference","passage","scripture reference","book/chapter","book chapter"].includes(h));
-    const idxTopic = hdr.findIndex(h=>["topic","title"].includes(h));
+    const idxDate  = findFirst(hdr, ["date","service date"]);
+    const idxVerse = findFirst(hdr, ["verse","bible verse","scripture","scripture text","topic","title"]);
+    const idxRef   = findFirst(hdr, ["reference","passage","scripture reference","book/chapter","book chapter"]);
 
     const rows = aoa.slice(1)
       .filter(r => r && r.some(c => String(c).trim()!==""))
       .map(r => {
         const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-        const verse = idxVerse !== -1 ? String(r[idxVerse] ?? "").trim()
-                   : idxTopic !== -1 ? String(r[idxTopic] ?? "").trim()
-                   : "";
+        const verse = idxVerse !== -1 ? String(r[idxVerse] ?? "").trim() : "";
         const ref = idxRef !== -1 ? String(r[idxRef] ?? "").trim() : "";
         return { date: d, verse, ref };
       })
@@ -333,9 +312,9 @@ async function loadSetlistsAndAnalytics(){
 
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
-    const idxDate   = hdr.findIndex(h=>["date","service date"].includes(h));
-    const idxSermon = hdr.findIndex(h=>["sermon","sermon topic","topic"].includes(h));
-    const idxSong   = hdr.findIndex(h=>["song","title","song title"].includes(h));
+    const idxDate   = findFirst(hdr, ["date","service date"]);
+    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
+    const idxSong   = findFirst(hdr, ["song","title","song title"]);
     // Notes intentionally removed
 
     const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
@@ -475,7 +454,6 @@ async function wikipediaOpenSearch(q){
 let pieInst, barInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
-// PIE: show percentages in legend & tooltip
 function drawPie(entries){
   const ctx = $("#pieChart");
   destroyChart(pieInst);
@@ -500,7 +478,7 @@ function drawPie(entries){
               const sum  = ds.reduce((a,b)=>a+(+b||0),0) || 1;
               return base.map((item, i) => {
                 const val = +ds[i] || 0;
-                const pct = Math.round((val/sum)*1000)/10; // 1 decimal
+                const pct = Math.round((val/sum)*1000)/10;
                 return { ...item, text: `${safeLabel(lbs[i])} — ${pct}%` };
               });
             }
@@ -520,7 +498,6 @@ function drawPie(entries){
   });
 }
 
-// BAR: quarter color cycle + safe labels
 function drawBar(entries){
   const ctx = $("#barChart");
   destroyChart(barInst);
@@ -528,12 +505,7 @@ function drawBar(entries){
   const labels = entries.map(e => safeLabel(e[0]));
   const data   = entries.map(e => e[1]);
 
-  const quarterColors = [
-    "#4e79a7", // Q1
-    "#f28e2b", // Q2
-    "#e15759", // Q3
-    "#76b7b2"  // Q4
-  ];
+  const quarterColors = ["#4e79a7","#f28e2b","#e15759","#76b7b2"];
   const bg = labels.map((_, i) => quarterColors[i % 4]);
   const border = bg;
 
@@ -555,12 +527,8 @@ function drawBar(entries){
       plugins: {
         tooltip: {
           callbacks: {
-            title(items){
-              return items.length ? safeLabel(items[0].label) : "";
-            },
-            label(ctx){
-              return `Plays: ${+ctx.parsed.y || 0}`;
-            }
+            title(items){ return items.length ? safeLabel(items[0].label) : ""; },
+            label(ctx){ return `Plays: ${+ctx.parsed.y || 0}`; }
           }
         }
       }
