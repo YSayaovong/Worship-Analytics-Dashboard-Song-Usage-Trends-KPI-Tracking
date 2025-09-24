@@ -1,8 +1,7 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   - Topics counted once per date (de-duplicated by Date + Topic)
-   - Songs still counted per row
-   - Two pies: Songs (left) and Topics (right)
+   - Right chart: New vs Repeat Songs (last 12 weeks) pie
+   - Right list: "New Songs (Last 12 Weeks)"
    - All dates include weekday (e.g., "Sunday, Sep 28, 2025")
 ========================= */
 
@@ -112,8 +111,6 @@ function findFirst(headers, candidates){
 }
 
 /* ---------- WORSHIP PRACTICE (table like Special Practice) ---------- */
-/* Always show the NEXT Thursday and NEXT Sunday relative to today’s midnight.
-   If today is Thu or Sun, roll to the FOLLOWING week (post-midnight behavior). */
 function nextOccurrence(targetDow){
   const today = todayLocalMidnight();
   const wd = today.getDay();
@@ -308,7 +305,7 @@ async function loadSetlistsAndAnalytics(){
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
     const idxDate   = findFirst(hdr, ["date","service date"]);
-    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
+    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]); // (unused now, but harmless)
     const idxSong   = findFirst(hdr, ["song","title","song title"]);
 
     const rows = aoa.slice(1).filter(r => r && r.some(c => String(c).trim()!==""));
@@ -341,10 +338,10 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
     /* -------- Analytics --------
-       SONGS: count every row (as before)
-       TOPICS: count at most once per date+topic
+       Left pie + Top 5 list: SONG COUNTS (per row, all time)
+       Right pie + Right list: NEW vs REPEAT (last 12 weeks)
     -------------------------------- */
-    // SONG COUNTS (all rows)
+    // SONG COUNTS
     let songCounts = [];
     if(idxSong !== -1){
       const counts = new Map();
@@ -355,38 +352,47 @@ async function loadSetlistsAndAnalytics(){
       songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
     }
 
-    // TOPIC COUNTS (dedupe by Date + normalized Topic)
-    let topicCounts = [];
-    if(idxSermon !== -1){
-      const tCounts = new Map();
-      const seen = new Set(); // key = <dateMillis>|<topicCanonical>
+    // Build first-use date per song
+    const firstUse = new Map(); // song -> first Date
+    if(idxSong !== -1 && idxDate !== -1){
       for(const r of rows){
-        const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-        if(!d) continue; // require a date to apply per-date dedupe
-        let t = String(r[idxSermon] ?? "").trim();
-        if(!t) continue;
-
-        // canonicalize topic: lowercase + collapse inner whitespace
-        const tCanon = t.toLowerCase().replace(/\s+/g, " ").trim();
-        const k = `${d.getTime()}|${tCanon}`;
-        if(seen.has(k)) continue;
-        seen.add(k);
-
-        tCounts.set(tCanon, (tCounts.get(tCanon)||0)+1);
+        const s = String(r[idxSong] ?? "").trim();
+        const d = toLocalDate(r[idxDate]);
+        if(!s || !d) continue;
+        if(!firstUse.has(s) || firstUse.get(s) > d) firstUse.set(s, d);
       }
-      // keep original case for display by picking the first seen label
-      const displayMap = new Map(); // tCanon -> firstSeenOriginal
-      for(const r of rows){
-        const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-        let t = String(r[idxSermon] ?? "").trim();
-        if(!d || !t) continue;
-        const tCanon = t.toLowerCase().replace(/\s+/g, " ").trim();
-        if(!displayMap.has(tCanon)) displayMap.set(tCanon, t);
-      }
-      topicCounts = [...tCounts.entries()]
-        .map(([canon, c]) => [displayMap.get(canon) || canon, c])
-        .sort((a,b)=> b[1]-a[1]);
     }
+
+    // Last 12 weeks window
+    const windowEnd = today;
+    const windowStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 84); // 12*7 days
+
+    // Unique songs scheduled in the window
+    const songsInWindow = new Set();
+    if(idxSong !== -1 && idxDate !== -1){
+      for(const r of rows){
+        const s = String(r[idxSong] ?? "").trim();
+        const d = toLocalDate(r[idxDate]);
+        if(!s || !d) continue;
+        if(d >= windowStart && d <= windowEnd){
+          songsInWindow.add(s);
+        }
+      }
+    }
+
+    // Count new vs repeat and prepare "new songs" list
+    let newCount = 0, repeatCount = 0;
+    const newSongsList = []; // {song, firstDate}
+    for(const s of songsInWindow){
+      const first = firstUse.get(s);
+      if(first && first >= windowStart){
+        newCount++;
+        newSongsList.push({ song: s, first });
+      }else{
+        repeatCount++;
+      }
+    }
+    newSongsList.sort((a,b)=> b.first - a.first);
 
     // Lists
     const top5Songs = songCounts.slice(0,5);
@@ -394,17 +400,16 @@ async function loadSetlistsAndAnalytics(){
       ? top5Songs.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
       : `<li class="dim">No data</li>`;
 
-    const topicsHeader = $("#bottom5")?.previousElementSibling;
-    if(topicsHeader) topicsHeader.textContent = "Top 5 – Most Popular Topics";
-    const top5Topics = topicCounts.slice(0,5);
-    $("#bottom5").innerHTML = top5Topics.length
-      ? top5Topics.map(([t,c])=>`<li>${escapeHtml(safeLabel(t))} — ${c}</li>`).join("")
-      : `<li class="dim">No topics</li>`;
+    const rightHeader = $("#bottom5")?.previousElementSibling;
+    if(rightHeader) rightHeader.textContent = "New Songs (Last 12 Weeks)";
+    $("#bottom5").innerHTML = newSongsList.length
+      ? newSongsList.slice(0,5).map(x=>`<li>${escapeHtml(safeLabel(x.song))} — ${fmtDate(x.first)}</li>`).join("")
+      : `<li class="dim">No new songs in the last 12 weeks.</li>`;
 
     // Charts
-    drawSongsPie(songCounts.slice(0,7));   // left pie: songs
-    drawTopicsPie(topicCounts.slice(0,7)); // right pie: topics
-    updateSecondChartTitle("Most Popular Topics (Pie)");
+    drawSongsPie(songCounts.slice(0,7));               // left: songs
+    drawNewRepeatPie(newCount, repeatCount);           // right: new vs repeat
+    updateSecondChartTitle("New vs Repeat (Last 12 Weeks)");
   }catch(e){
     console.error(e);
     $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
@@ -478,7 +483,7 @@ async function wikipediaOpenSearch(q){
 }
 
 /* ---------- Charts ---------- */
-let songsPieInst, topicsPieInst;
+let songsPieInst, newRepeatPieInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
 // Left pie: Plays by Song
@@ -526,16 +531,16 @@ function drawSongsPie(entries){
   });
 }
 
-// Right pie: Most Popular Topics (de-duped per date)
-function drawTopicsPie(entries){
+// Right pie: New vs Repeat (last 12 weeks)
+function drawNewRepeatPie(newCount, repeatCount){
   const ctx = $("#barChart"); // reuse existing canvas slot
-  destroyChart(topicsPieInst);
+  destroyChart(newRepeatPieInst);
 
-  const labels = entries.map(e => safeLabel(e[0]));
-  const data = entries.map(e => e[1]);
-  const total = data.reduce((a,b)=>a+(+b||0), 0) || 1;
+  const labels = ["New songs introduced (12w)","In rotation (12w)"];
+  const data = [newCount, repeatCount];
+  const total = Math.max(1, data.reduce((a,b)=>a+(+b||0), 0)); // avoid divide-by-zero
 
-  topicsPieInst = new Chart(ctx, {
+  newRepeatPieInst = new Chart(ctx, {
     type: "pie",
     data: { labels, datasets:[{ data }] },
     options: {
