@@ -1,23 +1,19 @@
 // ---------- CONFIG ----------
-// Your public repo details (adjust if you rename or move)
-const GITHUB = {
-  owner: "YSayaovong",
-  repo: "HFBC_Praise_Worship",
-  branch: "main"
-};
+const GITHUB = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
 
-// Relative paths inside the repo
 const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
-  setlist: "setlist/setlist.xlsx" // expected to contain multiple rows; first sheet, header row
+  reminders: "reminders/reminders.xlsx", // optional; else we keep static two reminders
+  setlist: "setlist/setlist.xlsx"
 };
 
-// ---------- HELPERS ----------
+// ---------- UTIL ----------
 const $ = (sel, root=document) => root.querySelector(sel);
+const fmtDate = d => d ? d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" }) : "—";
+const escapeHtml = s => s.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
 
 function rawUrl(pathRel){
-  // Build raw.githubusercontent URL
   return `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/${GITHUB.branch}/${pathRel}`;
 }
 
@@ -29,256 +25,276 @@ async function fetchWB(pathRel){
   return XLSX.read(ab, { type: "array" });
 }
 
-function sheetToAOA(wb){
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" }); // array of arrays
+function aoaFromWB(wb){
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
 }
 
 function renderAOATable(aoa, targetSel){
   const el = $(targetSel);
-  if(!aoa || aoa.length === 0){
-    el.innerHTML = `<p class="dim">No data found.</p>`;
-    return;
-  }
-  let html = `<table><thead><tr>`;
+  if(!aoa || aoa.length === 0){ el.innerHTML = `<p class="dim">No data.</p>`; return; }
   const header = aoa[0];
-  header.forEach(h => html += `<th>${escapeHtml(String(h))}</th>`);
-  html += `</tr></thead><tbody>`;
+  let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(String(h))}</th>`).join("")}</tr></thead><tbody>`;
   for(let i=1;i<aoa.length;i++){
     const row = aoa[i];
-    // Skip completely empty rows
-    if(row.every(cell => String(cell).trim() === "")) continue;
-    html += `<tr>` + header.map((_, cIdx)=>`<td>${escapeHtml(String(row[cIdx] ?? ""))}</td>`).join("") + `</tr>`;
+    if(row.every(c=>String(c).trim()==="")) continue;
+    html += `<tr>${header.map((_,j)=>`<td>${escapeHtml(String(row[j] ?? ""))}</td>`).join("")}</tr>`;
   }
   html += `</tbody></table>`;
   el.innerHTML = html;
 }
 
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
-  }[m]));
-}
-
-// ---------- LOADERS ----------
-async function loadAnnouncements(){
-  try{
-    const wb = await fetchWB(PATHS.announcements);
-    const aoa = sheetToAOA(wb);
-    renderAOATable(aoa, "#announcements-table");
-  }catch(err){
-    console.error("Announcements error:", err);
-    $("#announcements-table").innerHTML =
-      `<p class="dim">Unable to load <code>${PATHS.announcements}</code>. Ensure the file exists and is public.</p>`;
-  }
-}
-
-async function loadMembers(){
-  try{
-    const wb = await fetchWB(PATHS.members);
-    const aoa = sheetToAOA(wb);
-    renderAOATable(aoa, "#members-table");
-  }catch(err){
-    console.error("Members error:", err);
-    $("#members-table").innerHTML =
-      `<p class="dim">Unable to load <code>${PATHS.members}</code>. Ensure the file exists and is public.</p>`;
-  }
-}
-
-async function loadSetlistAndAnalytics(){
-  try{
-    const wb = await fetchWB(PATHS.setlist);
-    const aoa = sheetToAOA(wb);
-    if(!aoa || aoa.length < 2){
-      $("#setlist-table").innerHTML = `<p class="dim">No setlist rows found.</p>`;
-      return;
-    }
-
-    // Try to detect common headers
-    const headers = aoa[0].map(h => String(h).trim().toLowerCase());
-    const idxDate = headers.findIndex(h => ["date","service date"].includes(h));
-    const idxSong = headers.findIndex(h => ["song","title","song title"].includes(h));
-    const idxKey  = headers.findIndex(h => h === "key");
-    const idxNotes = headers.findIndex(h => ["notes","comment"].includes(h));
-
-    // Render the visible "This Week" by taking the most recent date if Date column exists,
-    // otherwise just render all rows after header.
-    let rows = aoa.slice(1).filter(r => r.some(cell => String(cell).trim() !== ""));
-    if(idxDate !== -1){
-      // Parse dates and group by date
-      const parsed = rows.map(r => ({
-        date: parseDateLoose(r[idxDate]),
-        row: r
-      })).filter(o => o.date !== null);
-
-      // Get latest date
-      if(parsed.length){
-        const latestDate = parsed.reduce((a,b)=> (a.date > b.date ? a : b)).date;
-        const latestRows = parsed.filter(o => sameYMD(o.date, latestDate)).map(o => o.row);
-
-        // Build a display AOA
-        const displayHeader = [];
-        if(idxSong !== -1) displayHeader.push("Song");
-        if(idxKey  !== -1) displayHeader.push("Key");
-        if(idxNotes!== -1) displayHeader.push("Notes");
-
-        const displayRows = latestRows.map(r => {
-          const out = [];
-          if(idxSong !== -1) out.push(r[idxSong] ?? "");
-          if(idxKey  !== -1) out.push(r[idxKey]  ?? "");
-          if(idxNotes!== -1) out.push(r[idxNotes]?? "");
-          return out;
-        });
-
-        $("#setlist-meta").textContent = `Service Date: ${latestDate.toLocaleDateString()}`;
-        renderAOATable([displayHeader, ...displayRows], "#setlist-table");
-      }else{
-        // Fallback: render entire sheet
-        renderAOATable(aoa, "#setlist-table");
-      }
-    }else{
-      // No date col: render entire sheet
-      $("#setlist-meta").textContent = "";
-      renderAOATable(aoa, "#setlist-table");
-    }
-
-    // ----- Analytics -----
-    // Count plays per song (across the whole sheet)
-    if(idxSong !== -1){
-      const counts = new Map();
-      const perDate = new Map(); // dateStr -> count rows that day
-      for(const r of rows){
-        const title = String(r[idxSong] ?? "").trim();
-        if(title){
-          counts.set(title, (counts.get(title) || 0) + 1);
-        }
-        if(idxDate !== -1){
-          const d = parseDateLoose(r[idxDate]);
-          if(d){
-            const key = d.toISOString().slice(0,10);
-            perDate.set(key, (perDate.get(key)||0)+1);
-          }
-        }
-      }
-
-      // Top/Bottom 5
-      const sorted = [...counts.entries()].sort((a,b)=> b[1]-a[1]);
-      const top5 = sorted.slice(0,5);
-      const bottom5 = sorted.slice(-5).reverse();
-
-      $("#top5").innerHTML = top5.length ? top5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
-      $("#bottom5").innerHTML = bottom5.length ? bottom5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
-
-      // Charts
-      drawPieChart(sorted.slice(0,7)); // top 7 for readability
-      drawBarChart(top5);
-      drawLineChart([...perDate.entries()].sort((a,b)=> a[0].localeCompare(b[0])));
-    }else{
-      $("#top5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
-      $("#bottom5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
-    }
-
-  }catch(err){
-    console.error("Setlist error:", err);
-    $("#setlist-table").innerHTML =
-      `<p class="dim">Unable to load <code>${PATHS.setlist}</code>. Ensure the file exists and is public.</p>`;
-    $("#top5").innerHTML = `<li class="dim">No data</li>`;
-    $("#bottom5").innerHTML = `<li class="dim">No data</li>`;
-  }
-}
-
-// ---------- Date helpers ----------
 function parseDateLoose(val){
   if(val == null) return null;
-  // If Excel serial date
   if(typeof val === "number"){
     try{
-      return XLSX.SSF.parse_date_code(val)
-        ? excelSerialToDate(val)
-        : null;
+      const base = new Date(Date.UTC(1899,11,30));
+      const ms = val * 86400000;
+      return new Date(base.getTime() + ms);
     }catch{ return null; }
   }
-  // Try native Date parsing
   const s = String(val).trim();
   if(!s) return null;
   const d = new Date(s);
   return isNaN(d) ? null : d;
 }
 
-function excelSerialToDate(serial){
-  // Excel serial to JS Date (assuming 1900 system)
-  const utc_days  = Math.floor(serial - 25569);
-  const utc_value = utc_days * 86400; // seconds
-  const date_info = new Date(utc_value * 1000);
-  const fractional_day = serial - Math.floor(serial) + 1e-7;
-  let totalSeconds = Math.floor(86400 * fractional_day);
-  const seconds = totalSeconds % 60;
-  totalSeconds = Math.floor(totalSeconds / 60);
-  const minutes = totalSeconds % 60;
-  const hours = Math.floor(totalSeconds / 60);
-  date_info.setHours(hours, minutes, seconds);
-  return date_info;
+function sameYMD(a,b){ return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+// ---------- LOADERS ----------
+async function loadAnnouncements(){
+  try{
+    const wb = await fetchWB(PATHS.announcements);
+    const aoa = aoaFromWB(wb);
+    // If first column is an Excel serial date, render formatted
+    const hdr = aoa[0].map(x=>String(x).toLowerCase());
+    const idxDate = hdr.findIndex(h=>["date","service date"].includes(h));
+    if(idxDate !== -1){
+      const out = aoa.map((row, i)=>{
+        if(i===0) return row;
+        const r = row.slice();
+        const d = parseDateLoose(r[idxDate]);
+        r[idxDate] = d ? fmtDate(d) : (r[idxDate] ?? "");
+        return r;
+      });
+      renderAOATable(out, "#announcements-table");
+    }else{
+      renderAOATable(aoa, "#announcements-table");
+    }
+  }catch(e){
+    console.error(e);
+    $("#announcements-table").innerHTML = `<p class="dim">Unable to load <code>${PATHS.announcements}</code>.</p>`;
+  }
 }
 
-function sameYMD(a,b){
-  return a.getFullYear()===b.getFullYear() &&
-         a.getMonth()===b.getMonth() &&
-         a.getDate()===b.getDate();
+async function loadReminders(){
+  try{
+    const wb = await fetchWB(PATHS.reminders);
+    const aoa = aoaFromWB(wb);
+    renderAOATable(aoa, "#reminders-table");
+  }catch(e){
+    // keep static two reminders silently
+  }
 }
 
-// ---------- Charts ----------
-let pieInst, barInst, lineInst;
-
-function destroyChart(inst){
-  if(inst){ inst.destroy(); }
+async function loadMembers(){
+  try{
+    const wb = await fetchWB(PATHS.members);
+    const aoa = aoaFromWB(wb);
+    renderAOATable(aoa, "#members-table");
+  }catch(e){
+    console.error(e);
+    $("#members-table").innerHTML = `<p class="dim">Unable to load <code>${PATHS.members}</code>.</p>`;
+  }
 }
 
-function drawPieChart(entries){
+// ---------- SETLIST with sermon + two weeks + stories ----------
+async function loadSetlistsAndAnalytics(){
+  try{
+    const wb = await fetchWB(PATHS.setlist);
+    const aoa = aoaFromWB(wb);
+    if(!aoa || aoa.length < 2){ $("#setlist-this").innerHTML=`<p class="dim">No rows.</p>`; return; }
+
+    const hdrRaw = aoa[0].map(h=>String(h));
+    const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
+    const idxDate   = hdr.findIndex(h=>["date","service date"].includes(h));
+    const idxSermon = hdr.findIndex(h=>["sermon","sermon topic","topic"].includes(h));
+    const idxSong   = hdr.findIndex(h=>["song","title","song title"].includes(h));
+    const idxKey    = hdr.findIndex(h=>h==="key");
+    const idxNotes  = hdr.findIndex(h=>["notes","comment"].includes(h));
+
+    const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
+
+    // Group rows by date
+    let groups = new Map(); // dateKey -> { date:Date|null, sermon?:string, rows:[] }
+    for(const r of rows){
+      const d = idxDate !== -1 ? parseDateLoose(r[idxDate]) : null;
+      const key = d ? d.toISOString().slice(0,10) : "__nodate__";
+      const sermon = idxSermon !== -1 ? String(r[idxSermon] ?? "").trim() : "";
+      if(!groups.has(key)) groups.set(key, { date:d, sermon: sermon || "", rows:[] });
+      const g = groups.get(key);
+      // keep first non-empty sermon seen for the date
+      if(sermon && !g.sermon) g.sermon = sermon;
+      g.rows.push(r);
+    }
+
+    // Sort groups by date desc with nodate last
+    const arr = [...groups.entries()].sort((a,b)=>{
+      const da = a[1].date, db = b[1].date;
+      if(da && db) return db - da;
+      if(da && !db) return -1;
+      if(!da && db) return 1;
+      return 0;
+    });
+
+    const thisG = arr[0]?.[1];
+    const lastG = arr[1]?.[1];
+
+    renderSetlistGroup(thisG, "#setlist-this-meta", "#setlist-this", idxSong, idxKey, idxNotes);
+    renderSetlistGroup(lastG, "#setlist-last-meta", "#setlist-last", idxSong, idxKey, idxNotes);
+
+    // Analytics from all rows
+    if(idxSong !== -1){
+      const counts = new Map();
+      for(const r of rows){
+        const s = String(r[idxSong] ?? "").trim();
+        if(s) counts.set(s, (counts.get(s)||0)+1);
+      }
+      const sorted = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
+      const top5 = sorted.slice(0,5);
+      const bottom5 = sorted.slice(-5).reverse();
+
+      $("#top5").innerHTML = top5.length ? top5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
+      $("#bottom5").innerHTML = bottom5.length ? bottom5.map(([s,c])=>`<li>${escapeHtml(s)} — ${c}</li>`).join("") : `<li class="dim">No data</li>`;
+
+      // Charts (pie top 7, bar top 5)
+      drawPie(sorted.slice(0,7));
+      drawBar(top5);
+    }else{
+      $("#top5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
+      $("#bottom5").innerHTML = `<li class="dim">Add a "Song" header to enable analytics.</li>`;
+    }
+  }catch(e){
+    console.error(e);
+    $("#setlist-this").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
+    $("#setlist-last").innerHTML = `<p class="dim">—</p>`;
+  }
+}
+
+function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxKey, idxNotes){
+  if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
+  $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
+
+  // Build minimal AOA
+  const header = ["Song","Key","Notes",""];
+  const rows = group.rows.map(r=>{
+    const song = idxSong !== -1 ? String(r[idxSong] ?? "") : "";
+    const key  = idxKey  !== -1 ? String(r[idxKey]  ?? "") : "";
+    const note = idxNotes!== -1 ? String(r[idxNotes]?? "") : "";
+    return [song, key, note, "story-slot"]; // placeholder token
+  });
+
+  // Render table then attach story buttons
+  let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
+  rows.forEach((r, i)=>{
+    html += `<tr>
+      <td>${escapeHtml(r[0])} <span class="story-btn" data-song="${escapeHtml(r[0])}" data-target="story-${i}">Story</span>
+          <div id="story-${i}" class="story" style="display:none;"></div>
+      </td>
+      <td>${escapeHtml(r[1])}</td>
+      <td>${escapeHtml(r[2])}</td>
+      <td></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  $(tableSel).innerHTML = html;
+
+  // Wire up story fetchers
+  $(tableSel).querySelectorAll(".story-btn").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const target = btn.getAttribute("data-target");
+      const song = btn.getAttribute("data-song");
+      const box = document.getElementById(target);
+      if(box.style.display==="none"){
+        box.style.display = "block";
+        box.innerHTML = `<span class="dim">Fetching story…</span>`;
+        const text = await fetchSongStory(song);
+        box.innerHTML = text ? escapeHtml(text) : `<span class="dim">No summary found.</span>`;
+      }else{
+        box.style.display = "none";
+      }
+    });
+  });
+}
+
+// ---------- Song story (Wikipedia) ----------
+async function fetchSongStory(query){
+  try{
+    // 1) try direct summary
+    let summary = await wikipediaSummary(query);
+    if(summary) return summary;
+
+    // 2) opensearch -> top title -> summary
+    const alt = await wikipediaOpenSearch(query);
+    if(alt){
+      summary = await wikipediaSummary(alt);
+      if(summary) return summary;
+    }
+
+    // 3) Try with "(hymn)" suffix if looks like a hymn
+    summary = await wikipediaSummary(`${query} (hymn)`);
+    return summary || "";
+  }catch{
+    return "";
+  }
+}
+
+async function wikipediaSummary(title){
+  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+  const res = await fetch(url, { headers:{ "accept":"application/json" } });
+  if(!res.ok) return "";
+  const j = await res.json();
+  if(j?.extract) return j.extract;
+  return "";
+}
+
+async function wikipediaOpenSearch(q){
+  const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=1&namespace=0&format=json&origin=*`;
+  const res = await fetch(url);
+  if(!res.ok) return "";
+  const j = await res.json();
+  const title = j?.[1]?.[0];
+  return title || "";
+}
+
+// ---------- Charts (pie & bar only) ----------
+let pieInst, barInst;
+function destroyChart(inst){ if(inst){ inst.destroy(); } }
+
+function drawPie(entries){
   const ctx = $("#pieChart");
   destroyChart(pieInst);
-  const labels = entries.map(([s])=>s);
-  const data = entries.map(([,c])=>c);
   pieInst = new Chart(ctx, {
     type: "pie",
-    data: { labels, datasets: [{ data }] },
-    options: { responsive: true, plugins:{ legend:{ position:"bottom" } } }
+    data: { labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]) }] },
+    options: { responsive:true, plugins:{ legend:{ position:"bottom" } } }
   });
 }
 
-function drawBarChart(entries){
+function drawBar(entries){
   const ctx = $("#barChart");
   destroyChart(barInst);
-  const labels = entries.map(([s])=>s);
-  const data = entries.map(([,c])=>c);
   barInst = new Chart(ctx, {
     type: "bar",
-    data: { labels, datasets: [{ data }] },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: true, ticks: { precision:0 } } }
-    }
-  });
-}
-
-function drawLineChart(datePairs){
-  const ctx = $("#lineChart");
-  destroyChart(lineInst);
-  const labels = datePairs.map(([d])=>d);
-  const data = datePairs.map(([,c])=>c);
-  lineInst = new Chart(ctx, {
-    type: "line",
-    data: { labels, datasets: [{ data, tension: 0.2, fill:false }] },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: true, ticks: { precision:0 } } }
-    }
+    data: { labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]) }] },
+    options: { responsive:true, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
   });
 }
 
 // ---------- BOOT ----------
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", async ()=>{
   await loadAnnouncements();
+  await loadReminders();
   await loadMembers();
-  await loadSetlistAndAnalytics();
+  await loadSetlistsAndAnalytics();
 });
