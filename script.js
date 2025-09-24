@@ -1,7 +1,8 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   - Second pie chart: Most Popular Topics (from setlist.xlsx)
-   - "Least Popular" songs list replaced with "Top 5 – Most Popular Topics"
+   - Topics counted once per date (de-duplicated by Date + Topic)
+   - Songs still counted per row
+   - Two pies: Songs (left) and Topics (right)
    - All dates include weekday (e.g., "Sunday, Sep 28, 2025")
 ========================= */
 
@@ -132,8 +133,6 @@ function loadPractice(){
 }
 
 /* ---------- SPECIAL PRACTICE (special_practice.xlsx) ---------- */
-/* Expects headers: DATE | SPECIAL PRACTICE (any case). Future-only.
-   Render as Date | Time (we map the sheet’s text into the “Time” column). */
 async function loadSpecialPractice(){
   try{
     const wb = await fetchWB(PATHS.special);
@@ -341,7 +340,10 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // --- Analytics (Songs Pie + Topics Pie + Lists) ---
+    /* -------- Analytics --------
+       SONGS: count every row (as before)
+       TOPICS: count at most once per date+topic
+    -------------------------------- */
     // SONG COUNTS (all rows)
     let songCounts = [];
     if(idxSong !== -1){
@@ -353,21 +355,37 @@ async function loadSetlistsAndAnalytics(){
       songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
     }
 
-    // TOPIC COUNTS (de-dup per service date to avoid inflating)
+    // TOPIC COUNTS (dedupe by Date + normalized Topic)
     let topicCounts = [];
     if(idxSermon !== -1){
       const tCounts = new Map();
-      const seen = new Set(); // date|topic
+      const seen = new Set(); // key = <dateMillis>|<topicCanonical>
       for(const r of rows){
         const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-        const t = String(r[idxSermon] ?? "").trim();
+        if(!d) continue; // require a date to apply per-date dedupe
+        let t = String(r[idxSermon] ?? "").trim();
         if(!t) continue;
-        const key = `${d ? d.getTime() : "nodate"}|${t.toLowerCase()}`;
-        if(seen.has(key)) continue;
-        seen.add(key);
-        tCounts.set(t, (tCounts.get(t)||0)+1);
+
+        // canonicalize topic: lowercase + collapse inner whitespace
+        const tCanon = t.toLowerCase().replace(/\s+/g, " ").trim();
+        const k = `${d.getTime()}|${tCanon}`;
+        if(seen.has(k)) continue;
+        seen.add(k);
+
+        tCounts.set(tCanon, (tCounts.get(tCanon)||0)+1);
       }
-      topicCounts = [...tCounts.entries()].sort((a,b)=>b[1]-a[1]);
+      // keep original case for display by picking the first seen label
+      const displayMap = new Map(); // tCanon -> firstSeenOriginal
+      for(const r of rows){
+        const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+        let t = String(r[idxSermon] ?? "").trim();
+        if(!d || !t) continue;
+        const tCanon = t.toLowerCase().replace(/\s+/g, " ").trim();
+        if(!displayMap.has(tCanon)) displayMap.set(tCanon, t);
+      }
+      topicCounts = [...tCounts.entries()]
+        .map(([canon, c]) => [displayMap.get(canon) || canon, c])
+        .sort((a,b)=> b[1]-a[1]);
     }
 
     // Lists
@@ -508,7 +526,7 @@ function drawSongsPie(entries){
   });
 }
 
-// Right pie: Most Popular Topics
+// Right pie: Most Popular Topics (de-duped per date)
 function drawTopicsPie(entries){
   const ctx = $("#barChart"); // reuse existing canvas slot
   destroyChart(topicsPieInst);
