@@ -8,7 +8,7 @@ const PATHS = {
   reminders: "reminders/reminders.xlsx",   // optional; falls back to two static reminders
   setlist: "setlist/setlist.xlsx",
   bible: "bible_study/bible_study.xlsx",   // last 4 weeks
-  special: "special_practice/special_practice.xlsx" // NEW: special practice
+  special: "special_practice/special_practice.xlsx" // Special Practice (DATE | SPECIAL PRACTICE)
 };
 
 /* =========================
@@ -151,9 +151,10 @@ async function loadAnnouncements(){
 
 /* =========================
    SPECIAL PRACTICE (from special_practice.xlsx)
+   Supports headers: DATE | SPECIAL PRACTICE
    - Future dates only (>= today)
-   - Show Date + Reason
-   - Deduplicate by date+reason
+   - Shows Date + Details
+   - Deduplicates by date+details
 ========================= */
 async function loadSpecialPractice(){
   try{
@@ -164,18 +165,15 @@ async function loadSpecialPractice(){
       return;
     }
 
+    // Normalize headers
     const hdrRaw = aoa[0].map(h => String(h).trim());
     const hdr = hdrRaw.map(h => h.toLowerCase());
 
-    const idxDate = findFirst(hdr, ["date","service date","practice date"]);
-    // Try to find a single "reason" column; fallbacks cover common names
-    let idxReason = findFirst(hdr, [
-      "reason","purpose","summary","title","topic","desc","description","note","notes","why","details"
+    // Column indices
+    const idxDate  = findFirst(hdr, ["date","service date","practice date"]);
+    const idxText  = findFirst(hdr, [
+      "special practice","special_practice","practice","details","reason","notes","note","description","desc","title","topic"
     ]);
-
-    // If bilingual columns exist, prefer English first, else Hmong
-    const idxEn = findFirst(hdr, ["english","reason en","en"]);
-    const idxHm = findFirst(hdr, ["hmong","reason hm","hm"]);
 
     const today = todayLocalMidnight();
     const seen = new Set();
@@ -183,35 +181,35 @@ async function loadSpecialPractice(){
 
     for(let i=1;i<aoa.length;i++){
       const r = aoa[i]; if(!r) continue;
+
       const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-      if(!d || d < today) continue;
+      if(!d || d < today) continue; // only upcoming
 
-      let reason = "";
-      if(idxReason !== -1) reason = String(r[idxReason] ?? "").trim();
-      else if(idxEn !== -1 || idxHm !== -1){
-        reason = String((idxEn !== -1 ? r[idxEn] : "") || (idxHm !== -1 ? r[idxHm] : "") || "").trim();
-      } else {
-        // fallback: first non-empty, non-date cell
-        const firstText = r.find((cell, j) => j !== idxDate && String(cell ?? "").trim() !== "");
-        reason = String(firstText ?? "").trim();
+      let text = idxText !== -1 ? String(r[idxText] ?? "").trim() : "";
+      if(!text){
+        // fallback: first non-empty non-date cell
+        text = String(r.find((cell, j) => j !== idxDate && String(cell ?? "").trim() !== "") ?? "").trim();
       }
-      if(!reason) continue;
+      if(!text) continue;
 
-      const key = `${d.toISOString().slice(0,10)}|${reason.toLowerCase()}`;
+      const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}|${text.toLowerCase()}`;
       if(seen.has(key)) continue;
       seen.add(key);
 
-      items.push({ date: d, reason });
+      items.push({ date: d, text });
     }
 
     items.sort((a,b)=> a.date - b.date);
+
     if(items.length === 0){
       $("#special-practice-table").innerHTML = `<p class="dim">No upcoming special practices.</p>`;
       return;
     }
 
-    const out = [["Date","Reason"]];
-    items.forEach(it => out.push([fmtDate(it.date), it.reason]));
+    const out = [["Date","Details"]];
+    for(const it of items){
+      out.push([fmtDate(it.date), it.text]);
+    }
     renderAOATable(out, "#special-practice-table");
   }catch(e){
     console.error(e);
@@ -315,7 +313,6 @@ async function loadSetlistsAndAnalytics(){
     const idxDate   = findFirst(hdr, ["date","service date"]);
     const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
     const idxSong   = findFirst(hdr, ["song","title","song title"]);
-    // Notes intentionally removed
 
     const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
 
