@@ -2,90 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <title>HFBC Worship — Single Page Hub</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HFBC Worship</title>
-  <link rel="stylesheet" href="style.css" />
-  <!-- Load XLSX before app -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script defer src="script.js"></script>
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Vendor CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js" defer></script>
+  <!-- App -->
+  <script src="script.js" defer></script>
 </head>
-<body class="container">
-  <header class="site-header">
-    <h1>HFBC Worship</h1>
-  </header>
-
-  <div id="diag" class="diag" hidden></div>
-
-  <!-- Row 1 -->
-  <section class="grid two">
-    <article class="card">
-      <h2 class="section-title">Announcements</h2>
-      <div id="announcements-table" class="table-wrap">Loading…</div>
-    </article>
-    <article class="card">
-      <h2 class="section-title">Reminders / Bible Study</h2>
-      <div id="bible-study-table" class="table-wrap">Loading…</div>
-    </article>
-  </section>
-
-  <!-- Row 2 -->
-  <section class="card">
-    <h2 class="section-title">Worship Team Members</h2>
-    <div id="members-table" class="table-wrap">Loading…</div>
-  </section>
-
-  <!-- Songs & Analytics -->
-  <section class="grid two">
-    <article class="card">
-      <h2 class="section-title">This Coming Week</h2>
-      <div class="dim" id="next-date">—</div>
-      <div id="next-week-table" class="table-wrap">Loading…</div>
-    </article>
-    <article class="card">
-      <h2 class="section-title">Last Week</h2>
-      <div class="dim" id="last-date">—</div>
-      <div id="last-week-table" class="table-wrap">Loading…</div>
-    </article>
-  </section>
-
-  <section class="grid two charts">
-    <article class="card">
-      <h3 class="section-title">Top 5 – Most Popular</h3>
-      <ul id="top5" class="bulleted"></ul>
-      <div class="chart-wrap"><canvas id="barChart" height="200"></canvas></div>
-    </article>
-    <article class="card">
-      <h3 class="section-title">Top 5 – Least Popular</h3>
-      <ul id="bottom5" class="bulleted"></ul>
-      <div class="chart-wrap"><canvas id="pieChart" height="200"></canvas></div>
-    </article>
-  </section>
-
-  <section class="card">
-    <h3 class="section-title">Song Library (Current Year)</h3>
-    <div id="library-table" class="table-wrap"></div>
-  </section>
-
-  <section class="card">
-    <h3 class="section-title">CCLI Reporting</h3>
-    <div class="grid two">
-      <div>
-        <div class="row between center">
-          <h4>Report to CCLI</h4>
-          <button class="btn" id="btn-export-ccli">Export CSV</button>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>HFBC Worship Hub</h1>
+          <div class="small">Single-page site pulling data straight from GitHub Excel files</div>
         </div>
-        <div id="ccli-report" class="table-wrap"></div>
       </div>
-      <div>
-        <h4>Public Domain / No Reporting</h4>
-        <div id="ccli-pd" class="table-wrap"></div>
-      </div>
-    </div>
-  </section>
+      <nav class="links">
+        <a class="chip" href="https://ysayaovong.github.io/HFBC_Praise_Worship/" target="_blank" rel="noopener">Public Site</a>
+        <a class="chip" href="https://github.com/YSayaovong/HFBC_Praise_Worship" target="_blank" rel="noopener">GitHub Repo</a>
+      </nav>
+    </header>
 
-  <footer class="site-footer">
-    <span>&copy; <span id="year"></span> HFBC Worship</span>
-  </footer>
+    <div class="panel">
+      <h2>Data Sources (GitHub)</h2>
+      <div class="input-row">
+        <input id="annUrl" type="url" placeholder="Announcements.xlsx URL"
+               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx">
+        <input id="bibleUrl" type="url" placeholder="Bible Study.xlsx URL"
+               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx">
+      </div>
+      <div class="input-row">
+        <input id="membersUrl" type="url" placeholder="Members.xlsx URL"
+               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx">
+        <input id="setlistUrl" type="url" placeholder="Setlist.xlsx URL"
+               value="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx">
+      </div>
+      <button id="loadBtn">Load / Refresh</button>
+      <div id="status" class="status muted"></div>
+      <details class="notice">
+        <summary>Note on GitHub URLs</summary>
+        This page automatically converts <span class="mono">github.com/.../blob/main/...</span> to
+        <span class="mono">raw.githubusercontent.com</span> for downloading the Excel files.
+      </details>
+    </div>
+
+    <div class="grid" style="margin-top:16px">
+      <section class="panel">
+        <h2>Announcements</h2>
+        <div class="kpi" id="annKpi"></div>
+        <div id="annTable"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Bible Study</h2>
+        <div class="kpi" id="bibleKpi"></div>
+        <div id="bibleTable"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Members</h2>
+        <div class="kpi" id="membersKpi"></div>
+        <div id="membersTable"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Setlist</h2>
+        <div class="kpi" id="setlistKpi"></div>
+        <div id="setlistTable"></div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:16px">
+      <h2>Song Analytics</h2>
+      <div class="kpi">
+        <span id="topSong" class="pill">Top song: <span class="muted">—</span></span>
+        <span id="leastSong" class="pill">Least played: <span class="muted">—</span></span>
+        <span id="totalPlays" class="pill">Total plays: <span class="muted">—</span></span>
+        <span id="uniqueSongs" class="pill">Unique songs: <span class="muted">—</span></span>
+      </div>
+      <div class="charts" style="margin-top:10px">
+        <div class="panel" style="padding:12px">
+          <h3>Most Played Songs (Bar)</h3>
+          <canvas id="barChart"></canvas>
+        </div>
+        <div class="panel" style="padding:12px">
+          <h3>Top Songs Share (Pie)</h3>
+          <canvas id="pieChart"></canvas>
+        </div>
+      </div>
+      <div class="panel" style="padding:12px;margin-top:16px">
+        <h3>Plays Over Time (Line)</h3>
+        <canvas id="lineChart"></canvas>
+      </div>
+    </section>
+
+    <div class="footer">Built with plain HTML/CSS/JS • SheetJS for Excel, Chart.js for charts</div>
+  </div>
 </body>
 </html>

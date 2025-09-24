@@ -1,211 +1,218 @@
-/* ================== CONFIG: raw.githubusercontent.com ================== */
-const RAW_BASE = "https://raw.githubusercontent.com/YSayaovong/HFBC_Praise_Worship/main";
-const SHEETS = {
-  announcements: `${RAW_BASE}/announcements/announcements.xlsx`,
-  bible:         `${RAW_BASE}/bible_study/bible_study.xlsx`,
-  members:       `${RAW_BASE}/members/members.xlsx`,
-  setlist:       `${RAW_BASE}/setlist/setlist.xlsx`,
-};
+// ---------- DOM helpers ----------
+const $ = (id) => document.getElementById(id);
 
-/* ================== UTILITIES ================== */
-const $  = s => document.querySelector(s);
-const $$ = s => Array.from(document.querySelectorAll(s));
-const fmtDate = d => new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
-
-function tableFromRows(headers, rows){
-  const thead = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr></thead>`;
-  const body  = rows.length
-    ? rows.map(r=>`<tr>${r.map(c=>`<td>${c ?? ""}</td>`).join("")}</tr>`).join("")
-    : `<tr><td class="dim" colspan="${headers.length}">No data</td></tr>`;
-  return `<table>${thead}<tbody>${body}</tbody></table>`;
-}
-function diag(msg){
-  const box = $("#diag"); box.hidden = false;
-  const line = document.createElement("div"); line.textContent = msg;
-  box.appendChild(line);
-}
-
-/* Warn if opened locally */
-if (location.protocol === "file:") {
-  diag("You opened index.html with file:// — browsers block cross-origin fetches. Please serve over HTTP(S) (GitHub Pages, Netlify, Vercel, or `python -m http.server`).");
-}
-
-/* ================== Excel loader (raw.githubusercontent.com) ================== */
-async function loadExcel(url){
+// Convert GitHub "blob" URL to raw.githubusercontent.com
+function toRawGithub(url){
   try{
-    const res = await fetch(url, {mode:"cors", cache:"no-store"});
-    if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    const ab = await res.arrayBuffer();
-    const wb = XLSX.read(ab, {type:"array"});
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws, {defval:""});
-  }catch(err){
-    diag(`Fetch failed: ${err.message}`);
-    return null;
-  }
+    const u = new URL(url);
+    if (u.hostname === 'raw.githubusercontent.com') return url;
+    if (u.hostname === 'github.com'){
+      const parts = u.pathname.split('/');
+      const i = parts.indexOf('blob');
+      if (i !== -1){
+        const owner = parts[1], repo = parts[2], branch = parts[i+1];
+        const path = parts.slice(i+2).join('/');
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+      }
+    }
+  }catch(e){}
+  return url;
 }
 
-/* ================== Wikipedia helpers ================== */
-async function wikiSummary(title){
-  try{
-    const s = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&format=json&origin=*&limit=1&search=${encodeURIComponent(title)}`);
-    const sj = await s.json();
-    const page = (sj[1] && sj[1][0]) ? sj[1][0] : title;
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page)}`);
-    if(!r.ok) return null;
-    return await r.json();
-  }catch{ return null; }
-}
-function inferAuthors(title, extract){
-  const curated = {
-    "Be Thou My Vision":"Ancient Irish text (attrib. Dallán Forgaill); English vers. Eleanor Hull (1912)",
-    "You Raise Me Up":"Rolf Løvland (music), Brendan Graham (lyrics)",
-    "10,000 Reasons":"Matt Redman, Jonas Myrin",
-  };
-  if(curated[title]) return curated[title];
-  const m = /by ([A-Z][A-Za-z’' .-]+(?:,? [A-Z][A-Za-z’' .-]+)*)/.exec(extract||"");
-  return m ? m[1] : "";
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, ch=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch]));
 }
 
-/* ================== HOME BLOCKS ================== */
-async function renderHomeBlocks(){
-  // Announcements
-  let rows = await loadExcel(SHEETS.announcements);
-  if(rows){
-    const a = rows.sort((x,y)=> new Date(y.Date||y.date) - new Date(x.Date||x.date))
-                  .map(r=>[fmtDate(r.Date||r.date), r.Announcement || r.Text || ""]);
-    $("#announcements-table").innerHTML = tableFromRows(["Date","Announcement"], a);
-  }else{
-    $("#announcements-table").innerHTML = `<div class="dim">Failed to load announcements.</div>`;
-  }
+function setKpi(id, text){ $(id).innerHTML = `<span class="pill">${escapeHtml(text)}</span>`; }
 
-  // Bible / reminders
-  rows = await loadExcel(SHEETS.bible);
-  if(rows && rows.length){
-    const headers = Object.keys(rows[0]);
-    $("#bible-study-table").innerHTML = tableFromRows(headers, rows.map(r=> headers.map(h=> r[h])));
-  }else{
-    $("#bible-study-table").innerHTML = `<div class="dim">Failed to load reminders.</div>`;
-  }
-
-  // Members
-  rows = await loadExcel(SHEETS.members);
-  if(rows){
-    const m = rows.map(r=>[ r.Name || r.NAME || "", r.Role || r.ROLE || "" ]);
-    $("#members-table").innerHTML = tableFromRows(["Name","Role"], m);
-  }else{
-    $("#members-table").innerHTML = `<div class="dim">Failed to load members.</div>`;
-  }
-}
-
-/* ================== SONGS & ANALYTICS ================== */
-async function renderSongs(){
-  const raw = await loadExcel(SHEETS.setlist);
-  if(!raw){
-    $("#next-week-table").innerHTML = `<div class="dim">Failed to load setlist.</div>`;
-    $("#last-week-table").innerHTML = `<div class="dim">Failed to load setlist.</div>`;
+function renderTable(rows, mountId, limit=200){
+  if (!rows || rows.length===0){
+    $(mountId).innerHTML = `<div class="small muted">No rows.</div>`;
     return;
   }
-
-  const rows = raw.map(r=>({
-    Date: r.Date || r.Sunday || r.ServiceDate || "",
-    Song: r.Song || r.Title || r.Name || "",
-    Topic: r.Topic || r.Theme || "",
-    Credit: r.Credit || r.Note || "",
-    CCLI: r.CCLI || r.Ccli || "",
-    PublicDomain: String(r.PublicDomain||"").toLowerCase()==="true",
-    Year: r.Year || r.Published || ""
-  })).filter(r=> r.Song);
-
-  const sorted = [...rows].sort((a,b)=> new Date(a.Date)-new Date(b.Date));
-  const dates  = [...new Set(sorted.map(r=>r.Date).filter(Boolean))].sort((a,b)=> new Date(a)-new Date(b));
-  const nextDate = dates.at(-1);
-  const lastDate = dates.length>1 ? dates.at(-2) : null;
-
-  async function enrich(r){
-    if(r.Credit) return {...r, Story:r.Credit, Author:""};
-    const sum = await wikiSummary(r.Song);
-    const story = sum?.extract || "";
-    const author = inferAuthors(r.Song, story);
-    return {...r, Story:story, Author:author};
-  }
-
-  if(nextDate){
-    $("#next-date").textContent = fmtDate(nextDate);
-    const e = await Promise.all(sorted.filter(r=>r.Date===nextDate).map(enrich));
-    $("#next-week-table").innerHTML = tableFromRows(
-      ["Date","Song","Author","Credit/Story","Topic"],
-      e.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
-    );
-  }else{
-    $("#next-week-table").innerHTML = `<div class="dim">No upcoming set found.</div>`;
-  }
-
-  if(lastDate){
-    $("#last-date").textContent = fmtDate(lastDate);
-    const e = await Promise.all(sorted.filter(r=>r.Date===lastDate).map(enrich));
-    $("#last-week-table").innerHTML = tableFromRows(
-      ["Date","Song","Author","Credit/Story","Topic"],
-      e.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
-    );
-  }else{
-    $("#last-week-table").innerHTML = `<div class="dim">No prior week found.</div>`;
-  }
-
-  // Analytics (current year)
-  const yearNow = new Date().getFullYear();
-  const yearRows = rows.filter(r=> new Date(r.Date).getFullYear()===yearNow);
-
-  const plays = new Map();
-  for(const r of yearRows){ const s=r.Song.trim(); if(s) plays.set(s,(plays.get(s)||0)+1); }
-  const rank=[...plays.entries()].sort((a,b)=>b[1]-a[1]);
-  const top5=rank.slice(0,5), bottom5=rank.slice(-5).reverse();
-
-  $("#top5").innerHTML = top5.map(([s,c])=>`<li>${s} — <span class="dim">${c}</span></li>`).join("") || `<li class="dim">No data</li>`;
-  $("#bottom5").innerHTML = bottom5.map(([s,c])=>`<li>${s} — <span class="dim">${c}</span></li>`).join("") || `<li class="dim">No data</li>`;
-
-  if(window.Chart){
-    const labels = top5.map(([s])=>s), data = top5.map(([,c])=>c);
-    new Chart($("#barChart"), {type:"bar",data:{labels,datasets:[{label:"Plays",data}]},options:{plugins:{legend:{display:false}}}});
-    new Chart($("#pieChart"), {type:"pie",data:{labels,datasets:[{data}]}} );
-  }
-
-  // Library & CCLI
-  const lib=new Map();
-  for(const r of yearRows){
-    const s=r.Song.trim(); if(!s) continue;
-    const e=lib.get(s)||{plays:0,ccli:"",pd:false,year:null};
-    e.plays++; if(r.CCLI) e.ccli=r.CCLI; if(r.PublicDomain) e.pd=true; if(r.Year) e.year=+r.Year;
-    lib.set(s,e);
-  }
-  $("#library-table").innerHTML = tableFromRows(
-    ["Song","Plays","Status"],
-    [...lib.entries()].sort((a,b)=>b[1].plays-a[1].plays).map(([s,v])=>{
-      const isPD = v.pd || (v.year && v.year<=1929);
-      const status = v.ccli && !isPD ? "Report to CCLI" : (isPD ? "Public Domain" : "Unknown");
-      return [s,v.plays,status];
-    })
-  );
-
-  const ccli=[], pd=[];
-  for(const [s,v] of lib){
-    const isPD=v.pd || (v.year && v.year<=1929);
-    if(v.ccli && !isPD) ccli.push([s,v.plays,v.ccli]);
-    else if(isPD)       pd.push([s,v.plays,v.pd?"PublicDomain: TRUE":(v.year?`Year: ${v.year}`:"—")]);
-  }
-  $("#ccli-report").innerHTML = tableFromRows(["Song","Plays","CCLI"], ccli);
-  $("#ccli-pd").innerHTML     = tableFromRows(["Song","Plays","Basis"], pd);
-
-  $("#btn-export-ccli").onclick = ()=>{
-    const data=ccli.map(([Song,Plays,CCLI])=>({Song,Plays,CCLI}));
-    const ws=XLSX.utils.json_to_sheet(data), wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"CCLI"); XLSX.writeFile(wb,"ccli_report.csv");
-  };
+  const headers = Object.keys(rows[0]);
+  const head = `<tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+  const body = rows.slice(0,limit).map(r=>{
+    return `<tr>${headers.map(h=>`<td>${escapeHtml(String(r[h]))}</td>`).join('')}</tr>`;
+  }).join('');
+  $(mountId).innerHTML = `<div class="small muted">Showing ${Math.min(rows.length,limit)} of ${rows.length} rows</div>
+    <div style="overflow:auto;max-height:380px;border:1px solid rgba(255,255,255,.06);border-radius:10px">
+      <table><thead>${head}</thead><tbody>${body}</tbody></table>
+    </div>`;
 }
 
-/* ================== INIT ================== */
-(async function(){
-  await renderHomeBlocks();
-  await renderSongs();
-  $$("#year").forEach(el=> el.textContent = new Date().getFullYear());
-})();
+// ---------- Excel loading ----------
+async function fetchSheet(url){
+  const raw = toRawGithub(url);
+  const res = await fetch(raw, {mode:'cors'});
+  if (!res.ok) throw new Error(`HTTP ${res.status} on ${raw}`);
+  const buf = await res.arrayBuffer();
+  const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
+  return {rows, sheetName, count: rows.length};
+}
+
+// ---------- Analytics (Setlist) ----------
+function pickColumn(headers, candidates){
+  const lower = headers.map(h=>h.toLowerCase());
+  for (const cand of candidates){
+    const idx = lower.findIndex(h=> h===cand || h.includes(cand));
+    if (idx !== -1) return headers[idx];
+  }
+  return null;
+}
+
+function parseDateFlexible(val){
+  if (!val) return null;
+  if (typeof val === 'number'){
+    const epoch = new Date(Date.UTC(1899,11,30)); // Excel serial date base
+    const ms = val * 86400000;
+    return new Date(epoch.getTime()+ms);
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function buildSongStats(setlistRows){
+  if (!setlistRows || setlistRows.length===0) return null;
+  const headers = Object.keys(setlistRows[0]);
+  const songCol = pickColumn(headers, ['song title','song','title','songs']);
+  const dateCol = pickColumn(headers, ['date','service date','when','week']);
+
+  const counts = new Map();
+  const timeline = new Map(); // yyyy-mm -> count
+  let total = 0;
+
+  for(const r of setlistRows){
+    const name = (r[songCol] ?? '').toString().trim();
+    if (name){
+      counts.set(name, (counts.get(name)||0)+1);
+      total++;
+    }
+    if (dateCol){
+      const dt = parseDateFlexible(r[dateCol]);
+      if (dt){
+        const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+        timeline.set(key, (timeline.get(key)||0)+1);
+      }
+    }
+  }
+  const freq = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]);
+  const top = freq[0] || ['—', 0];
+  const least = freq.length ? freq.at(-1) : ['—', 0];
+  const unique = counts.size;
+
+  const tl = Array.from(timeline.entries()).sort((a,b)=> a[0].localeCompare(b[0]));
+  return {freq, top, least, unique, total, timeline: tl};
+}
+
+// ---------- Charts ----------
+let barChart, pieChart, lineChart;
+function upsertChart(ctxId, type, data, options){
+  const existing = {barChart, pieChart, lineChart}[ctxId];
+  if (existing) existing.destroy();
+  const ctx = document.getElementById(ctxId).getContext('2d');
+  const chart = new Chart(ctx, { type, data, options });
+  if (ctxId==='barChart') barChart = chart;
+  if (ctxId==='pieChart') pieChart = chart;
+  if (ctxId==='lineChart') lineChart = chart;
+}
+
+function drawCharts(stats){
+  if (!stats){
+    upsertChart('barChart','bar',{labels:[],datasets:[{label:'No data',data:[]}]},{});
+    upsertChart('pieChart','pie',{labels:[],datasets:[{label:'No data',data:[]}]},{});
+    upsertChart('lineChart','line',{labels:[],datasets:[{label:'No data',data:[]}]},{});
+    return;
+  }
+  const topN = stats.freq.slice(0,10);
+  const labels = topN.map(d=>d[0]);
+  const values = topN.map(d=>d[1]);
+
+  upsertChart('barChart','bar',{
+    labels,
+    datasets:[{label:'Play Count (Top 10)', data: values}]
+  },{
+    responsive:true,
+    plugins:{legend:{display:false}},
+    scales:{y:{beginAtZero:true}}
+  });
+
+  const pieN = stats.freq.slice(0,6);
+  upsertChart('pieChart','pie',{
+    labels: pieN.map(d=>d[0]),
+    datasets:[{label:'Top Share', data: pieN.map(d=>d[1])}]
+  },{responsive:true});
+
+  const tlLabels = stats.timeline.map(d=>d[0]);
+  const tlValues = stats.timeline.map(d=>d[1]);
+  upsertChart('lineChart','line',{
+    labels: tlLabels,
+    datasets:[{label:'Total Plays / Month', data: tlValues, tension: .25}]
+  },{
+    responsive:true,
+    plugins:{legend:{display:true}},
+    scales:{y:{beginAtZero:true}}
+  });
+}
+
+// ---------- Main load ----------
+async function loadAll(){
+  const btn = $('loadBtn');
+  const status = $('status');
+  btn.disabled = true;
+  status.innerHTML = `<span class="loader"></span> Loading Excel files from GitHub…`;
+
+  const urls = {
+    announcements: $('annUrl').value.trim(),
+    bible: $('bibleUrl').value.trim(),
+    members: $('membersUrl').value.trim(),
+    setlist: $('setlistUrl').value.trim()
+  };
+
+  try{
+    const [ann, bible, members, setlist] = await Promise.all([
+      fetchSheet(urls.announcements),
+      fetchSheet(urls.bible),
+      fetchSheet(urls.members),
+      fetchSheet(urls.setlist)
+    ]);
+
+    // Tables + KPIs
+    setKpi('annKpi', `${ann.count} rows • sheet “${ann.sheetName}”`);
+    renderTable(ann.rows, 'annTable');
+
+    setKpi('bibleKpi', `${bible.count} rows • sheet “${bible.sheetName}”`);
+    renderTable(bible.rows, 'bibleTable');
+
+    setKpi('membersKpi', `${members.count} rows • sheet “${members.sheetName}”`);
+    renderTable(members.rows, 'membersTable');
+
+    setKpi('setlistKpi', `${setlist.count} rows • sheet “${setlist.sheetName}”`);
+    renderTable(setlist.rows, 'setlistTable');
+
+    // Analytics
+    const stats = buildSongStats(setlist.rows);
+    $('topSong').innerHTML = `Top song: <strong>${stats?.top?.[0] ?? '—'}</strong> (${stats?.top?.[1] ?? 0})`;
+    $('leastSong').innerHTML = `Least played: <strong>${stats?.least?.[0] ?? '—'}</strong> (${stats?.least?.[1] ?? 0})`;
+    $('totalPlays').innerHTML = `Total plays: <strong>${stats?.total ?? 0}</strong>`;
+    $('uniqueSongs').innerHTML = `Unique songs: <strong>${stats?.unique ?? 0}</strong>`;
+    drawCharts(stats);
+
+    status.innerHTML = `<span class="ok">Loaded successfully.</span>`;
+  }catch(err){
+    console.error(err);
+    status.innerHTML = `<span class="err">Load failed:</span> <span class="small">${escapeHtml(err.message)}</span><br>
+    <span class="small">Tip: Keep the repo public. This page auto-converts “blob” links to raw URLs.</span>`;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// Wire up
+window.addEventListener('DOMContentLoaded', () => {
+  $('loadBtn').addEventListener('click', loadAll);
+  loadAll();
+});
