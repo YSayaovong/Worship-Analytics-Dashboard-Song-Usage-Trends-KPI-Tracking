@@ -2,55 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hymnal • HFBC – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark light" />
+  <title>HFBC Worship • Hymnal & Notes</title>
   <link rel="stylesheet" href="style.css" />
+  <script defer src="script.js"></script>
 </head>
-<body data-page="hymnal">
+<body class="container">
   <header class="site-header">
-    <a class="corner-cross" href="#top" aria-label="Cross">
-      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-        <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6z"/>
-      </svg>
-    </a>
-
-    <div class="container nav">
-      <a class="brand" href="index.html">Hmong First Baptist Church – Praise & Worship</a>
-      <nav>
-        <a href="index.html">Home</a>
-        <a href="reporting.html">Reporting</a>
-        <a href="hymnal.html" aria-current="page">Hymnal</a>
-      </nav>
-    </div>
+    <h1>Hymnal & Notes</h1>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="reporting.html">Weekly Songs & Analytics</a>
+      <a href="hymnal.html" aria-current="page">Hymnal & Notes</a>
+    </nav>
   </header>
 
-  <main id="top">
-    <section class="section">
-      <div class="container">
-        <h2 class="section-title">Hymnal</h2>
-        <div class="iframe-wrap card">
-          <iframe
-            title="Hymnal"
-            src="https://online.fliphtml5.com/oxmi/drbm/#p=3"
-            allowfullscreen
-            loading="lazy"
-          ></iframe>
+  <section class="grid two">
+    <article class="card">
+      <h2 class="section-title">Online Hymnal</h2>
+      <p><a class="btn" target="_blank" href="https://online.fliphtml5.com/oxmi/drbm/#p=3">Open HFBC Hymnal (external)</a></p>
+      <p class="dim small">We reference this hymnal across the site for titles and numbers.</p>
+    </article>
+
+    <article class="card">
+      <h2 class="section-title">Song Notes Workspace</h2>
+      <p>Add PDFs named by song number (1–352) in a <code>/pdf/</code> folder. Left column lists numbers & titles; right shows your uploaded PDF with markups.</p>
+      <div class="grid two" id="notes-grid">
+        <div>
+          <input id="song-search" class="input" placeholder="Search song # or title…"/>
+          <ul id="song-index" class="list"></ul>
         </div>
-        <p class="dim small">
-          Embedded from FlipHTML5. If it does not load in your network,
-          <a href="https://online.fliphtml5.com/oxmi/drbm/#p=3" target="_blank" rel="noopener">open in a new tab</a>.
-        </p>
+        <div>
+          <iframe id="pdf-frame" title="Song PDF" class="pdf"></iframe>
+        </div>
       </div>
-    </section>
-  </main>
+    </article>
+  </section>
 
   <footer class="site-footer">
-    <div class="container">
-      <p class="dim">© <span id="year"></span> Hmong First Baptist Church • Praise & Worship Team</p>
-    </div>
+    <span>&copy; <span id="year"></span> HFBC Worship</span>
   </footer>
-
-  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

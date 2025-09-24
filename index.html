@@ -2,82 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hmong First Baptist Church – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark light" />
+  <title>HFBC Worship • Home</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- SheetJS for reading Excel, Chart.js used on reporting.html but safe to preload -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+  <script defer src="script.js"></script>
 </head>
-<body data-page="home">
+<body class="container">
   <header class="site-header">
-    <a class="corner-cross" href="#top" aria-label="Cross">
-      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-        <path d="M13 3h-2v6H5v2h6v10h2V11h6V9h-6z"/>
-      </svg>
-    </a>
-
-    <div class="container nav">
-      <a class="brand" href="index.html">Hmong First Baptist Church – Praise & Worship</a>
-      <nav>
-        <a href="index.html" aria-current="page">Home</a>
-        <a href="reporting.html">Reporting</a>
-        <a href="hymnal.html">Hymnal</a>
-      </nav>
-    </div>
+    <h1>HFBC Worship</h1>
+    <nav class="nav">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="reporting.html">Weekly Songs & Analytics</a>
+      <a href="hymnal.html">Hymnal & Notes</a>
+    </nav>
   </header>
 
-  <main id="top">
-    <section id="top-cards" class="section">
-      <div class="container">
-        <div class="grid three">
-          <article class="card" id="announcements">
-            <h2 class="section-title">Announcements</h2>
-            <div id="announcements-table">Loading announcements…</div>
-          </article>
+  <!-- Row 1: Announcements + Reminders -->
+  <section class="grid two" id="row-top">
+    <article class="card" id="announcements">
+      <h2 class="section-title">Announcements</h2>
+      <div id="announcements-table" class="table-wrap">Loading…</div>
+    </article>
 
-          <aside class="card reminder-card" id="reminders">
-            <h2 class="section-title">Reminders</h2>
-            <ul class="reminder-list">
-              <li>
-                <div class="reminder-label">Thursday Practice</div>
-                <div class="reminder-time">6:00 PM – 8:00 PM</div>
-              </li>
-              <li>
-                <div class="reminder-label">Sunday Practice</div>
-                <div class="reminder-time">8:40 AM – 9:30 AM</div>
-              </li>
-            </ul>
-            <p class="reminder-note dim small">
-              Please arrive 5 minutes early to be ready to begin practice.
-            </p>
-          </aside>
+    <aside class="card" id="reminders">
+      <h2 class="section-title">Reminders</h2>
+      <div id="bible-study-table" class="table-wrap">Loading…</div>
+    </aside>
+  </section>
 
-          <article class="card" id="members">
-            <h2 class="section-title">Worship Team Members</h2>
-            <div id="members-table">Loading members…</div>
-            <p class="dim small">Source: <code>members/members.xlsx</code></p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section id="bible-study" class="section alt">
-      <div class="container">
-        <h2 class="section-title">Bible Study</h2>
-        <div id="bible-study-table" class="card">Loading Bible study…</div>
-        <p class="dim small">Source: <code>bible_study/bible_study.xlsx</code> — last 4 weeks only.</p>
-      </div>
-    </section>
-  </main>
+  <!-- Row 2: Worship Team Members underneath -->
+  <section class="card" id="members-card">
+    <h2 class="section-title">Worship Team Members</h2>
+    <div id="members-table" class="table-wrap">Loading…</div>
+    <p class="dim small">Source: <code>members/members.xlsx</code></p>
+  </section>
 
   <footer class="site-footer">
-    <div class="container">
-      <p class="dim">© <span id="year"></span> Hmong First Baptist Church • Praise & Worship Team</p>
-    </div>
+    <span>&copy; <span id="year"></span> HFBC Worship</span>
   </footer>
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="script.js"></script>
-  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

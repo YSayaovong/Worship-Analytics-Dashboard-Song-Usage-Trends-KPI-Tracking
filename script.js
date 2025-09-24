@@ -1,539 +1,267 @@
-/* HFBC – Praise & Worship (Static, GitHub-hosted)
-   Pages:
-     - index.html (Home): Announcements, Reminders, Bible Study (4 weeks), Members
-     - reporting.html: Weekly Songs (+stories), Analytics, CCLI buckets, CSV export
-     - hymnal.html: FlipHTML5 embed
-*/
-
-const GH = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
-const PATHS = {
-  specialCurrent: "setlist/setlist.xlsx",
-  setlistsDir: "setlists",
-  announcements: "announcements/announcements.xlsx",
-  members: "members/members.xlsx",
-  bibleStudy: "bible_study/bible_study.xlsx"
+/* ========= CONFIG: Excel sources (converted to raw URLs) ========= */
+const XLSX_SOURCES = {
+  announcements: ghRaw("https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx"),
+  bible:         ghRaw("https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx"),
+  members:       ghRaw("https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx"),
+  setlist:       ghRaw("https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx"),
 };
 
-// ---------- tiny DOM helpers ----------
-const $ = (s, r=document) => r.querySelector(s);
-
-// ---------- GitHub fetch helpers ----------
-const apiURL = (p) => `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${encodeURIComponent(p)}?ref=${encodeURIComponent(GH.branch)}`;
-const rawURL = (p) => `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${p}`;
-
-async function listDir(path){
-  const r = await fetch(apiURL(path), { headers:{ "Accept":"application/vnd.github+json" }});
-  if(!r.ok) return [];
-  return r.json();
-}
-async function fetchWB(path){
-  const r = await fetch(rawURL(path));
-  if(!r.ok) throw new Error(`Fetch error ${r.status} for ${path}`);
-  const ab = await r.arrayBuffer();
-  return XLSX.read(ab, { type:"array" });
-}
-function firstSheetAOA(wb){
-  const sh = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sh, { header:1, defval:"" });
-}
-function excelSerialToDate(val){
-  if (typeof val === "number") {
-    const o = XLSX.SSF.parse_date_code(val);
-    if (o) return new Date(o.y, o.m - 1, o.d);
-  }
-  if (typeof val === "string" && val.trim() !== "") {
-    const num = Number(val);
-    if (!Number.isNaN(num)) {
-      const o = XLSX.SSF.parse_date_code(num);
-      if (o) return new Date(o.y, o.m - 1, o.d);
-    }
-    const d = new Date(val);
-    if (!Number.isNaN(d)) return d;
-  }
-  return null;
-}
-function niceDate(d){ return d.toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" }); }
-function normalizeAnnouncementText(s){
-  let out = String(s ?? "");
-  out = out.replace(/:(?=\d)/g, ": ");
-  out = out.replace(/([A-Za-z])(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "$1 $2");
-  return out.trim();
+// Turn any GitHub blob link into a raw link
+function ghRaw(url){
+  return url.replace("https://github.com/","https://raw.githubusercontent.com/").replace("/blob/","/");
 }
 
-// ---------- generic table renderer ----------
-function renderTable(aoa, targetSel){
-  const el = $(targetSel);
-  if(!el){ return; }
-  if(!aoa || aoa.length===0){ el.textContent = "No data."; return; }
+/* ========= UTILITIES ========= */
+const $  = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const fmtDate = d => new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 
-  const headers = (aoa[0] || []).map(h => String(h));
-  const dateCols = new Set();
-  headers.forEach((h,i)=>{ if(/date/i.test(h)) dateCols.add(i); });
-
-  function prettyDateCell(v){
-    const d = excelSerialToDate(v) || new Date(v);
-    return (d && !isNaN(d)) ? niceDate(d) : String(v);
-  }
-
-  let html = "<table>";
-  aoa.forEach((row,rIdx)=>{
-    html += "<tr>";
-    row.forEach((cell,cIdx)=>{
-      let out = String(cell ?? "");
-      if(rIdx>0 && dateCols.has(cIdx)) out = prettyDateCell(cell);
-      html += (rIdx===0? `<th>${out}</th>` : `<td>${out}</td>`);
-    });
-    html += "</tr>";
-  });
-  html += "</table>";
-  el.innerHTML = html;
+function tableFromRows(headers, rows){
+  const thead = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr></thead>`;
+  const tbody = `<tbody>${rows.length ? rows.map(r=>`<tr>${r.map(c=>`<td>${c ?? ""}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}" class="dim">No data</td></tr>`}</tbody>`;
+  return `<table>${thead}${tbody}</table>`;
 }
 
-// ---------- announcements (hide > 31 days) ----------
-async function loadAnnouncements(){
-  const target = "#announcements-table";
+async function fetchExcel(url){
+  const res = await fetch(url, {cache:"no-store"});
+  const ab  = await res.arrayBuffer();
+  const wb  = XLSX.read(ab, {type:"array"});
+  // Use first worksheet by default
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, {defval:""});
+}
+
+/* ========= WIKIPEDIA HELPERS (for story/author when not in Excel) ========= */
+// Get best page title, then summary
+async function wikiSummary(title){
+  // Search first to resolve exact page
+  const s = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&format=json&origin=*&search=${encodeURIComponent(title)}&limit=1`);
+  const sj = await s.json();
+  const page = (sj[1] && sj[1][0]) ? sj[1][0] : title;
+  const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(page)}`);
+  if(!r.ok) return null;
+  return await r.json(); // has .title, .extract, .description
+}
+
+// naive author extraction heuristic, with curated fallbacks
+function inferAuthors(title, extract){
+  const map = {
+    "Be Thou My Vision": "Ancient Irish text (attrib. Dallán Forgaill); English vers. Eleanor Hull (1912)",
+    "You Raise Me Up": "Rolf Løvland (music), Brendan Graham (lyrics)",
+    "10,000 Reasons": "Matt Redman, Jonas Myrin"
+  };
+  if(map[title]) return map[title];
+  // crude pattern hunt
+  const m = /by ([A-Z][A-Za-z’' .-]+(?:,? [A-Z][A-Za-z’' .-]+)*)/.exec(extract || "");
+  return m ? m[1] : "";
+}
+
+/* ========= PAGES ========= */
+async function renderHome(){
+  // Announcements
   try{
-    const wb = await fetchWB(PATHS.announcements);
-    const aoa = firstSheetAOA(wb);
-    if(aoa.length===0){ $(target).textContent = "No announcements."; return; }
-
-    const headers = aoa[0].map(h => String(h));
-    const dateIdx = headers.findIndex(h => /date/i.test(h));
-    const textIdx = headers.findIndex(h => /(announcement|details?)/i.test(h));
-    const idxDate = dateIdx >= 0 ? dateIdx : 0;
-    const idxText = textIdx >= 0 ? textIdx : 1;
-
-    const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate() - 31);
-
-    let rows = aoa.slice(1)
-      .filter(r => r.some(c => String(c).trim()!==""))
-      .map(r => {
-        const d = excelSerialToDate(r[idxDate]) || new Date(r[idxDate]);
-        const validDate = (d && !isNaN(d)) ? d : null;
-        const ds = validDate ? niceDate(validDate) : String(r[idxDate]);
-        const txt = normalizeAnnouncementText(r[idxText] || "");
-        return { d: validDate, ds, txt };
-      })
-      .filter(r => r.d && r.d >= cutoff)
-      .sort((a,b)=> b.d - a.d);
-
-    if (rows.length === 0){
-      $(target).innerHTML = `<p class="dim">No announcements in the last 31 days.</p>`;
-      return;
-    }
-
-    const pretty = [["DATE","ANNOUNCEMENT"], ...rows.map(r => [r.ds, r.txt])];
-    renderTable(pretty, target);
+    const rows = await fetchExcel(XLSX_SOURCES.announcements);
+    const aRows = rows
+      .sort((a,b)=> new Date(b.Date||b.date) - new Date(a.Date||a.date))
+      .map(a=>[ fmtDate(a.Date || a.date), a.Announcement || a.Text || a.text ]);
+    $("#announcements-table").innerHTML = tableFromRows(["Date","Announcement"], aRows);
   }catch(e){
-    $(target).innerHTML = `<p class="dim">Add <code>${PATHS.announcements}</code> with headers like: Date | Announcement.</p>`;
+    $("#announcements-table").innerHTML = `<div class="dim">Failed to load announcements.</div>`;
   }
-}
 
-// ---------- bible study (last 4 weeks) ----------
-async function loadBibleStudy(){
-  const target = "#bible-study-table";
+  // Bible study / reminders block
   try{
-    const wb = await fetchWB(PATHS.bibleStudy);
-    const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length === 0){ $(target).textContent = "No Bible study items."; return; }
-
-    const headers = aoa[0].map(h => String(h));
-    const di = headers.findIndex(h => /date/i.test(h));
-    if (di === -1){ renderTable(aoa, target); return; }
-
-    const today = new Date(); today.setHours(23,59,59,999);
-    const fourWeeksAgo = new Date(today); fourWeeksAgo.setDate(today.getDate() - 28); fourWeeksAgo.setHours(0,0,0,0);
-
-    const rows = aoa
-      .slice(1)
-      .filter(r => r.some(c => String(c).trim()!==""))
-      .map(r => ({ r, d: excelSerialToDate(r[di]) || new Date(r[di]) }))
-      .filter(x => x.d && !isNaN(x.d) && x.d >= fourWeeksAgo && x.d <= today)
-      .sort((a,b) => b.d - a.d)
-      .map(x => x.r);
-
-    if (rows.length === 0){
-      $(target).innerHTML = `<p class="dim">No Bible study items in the past 4 weeks.</p>`;
-      return;
-    }
-    renderTable([headers, ...rows], target);
+    const rows = await fetchExcel(XLSX_SOURCES.bible);
+    // Expect columns: Day, Time, Note  (flexible: Thursday/Sunday rows)
+    const headers = Object.keys(rows[0]||{});
+    $("#bible-study-table").innerHTML = tableFromRows(headers, rows.map(r=>headers.map(h=>r[h])));
   }catch(e){
-    $(target).innerHTML = `<p class="dim">Unable to load. Ensure <code>${PATHS.bibleStudy}</code> exists.</p>`;
+    $("#bible-study-table").innerHTML = `<div class="dim">Failed to load reminders.</div>`;
   }
-}
 
-// ---------- setlists & analytics helpers ----------
-function toDateFromName(name){
-  const m = /^(\d{4})-(\d{2})-(\d{2})\.xlsx$/.exec(name);
-  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`) : null;
-}
-async function getDatedFiles(){
-  const items = await listDir("setlists");
-  return items
-    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
-    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-    .sort((a,b)=> a.date - b.date);
-}
-function parseMeta(wb, aoa){
-  let sermon="", serviceDate=null;
-  if(wb.Sheets["Meta"]){
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets["Meta"], { header:1, defval:"" });
-    for(const r of rows){
-      const k = String(r[0]||"").toLowerCase();
-      const v = r[1] || "";
-      if(k==="sermon")  sermon = v || sermon;
-      if(k==="date" || k==="servicedate" || k==="service date"){
-        const d = excelSerialToDate(v) || new Date(v);
-        if(!isNaN(d)) serviceDate = d;
-      }
-    }
-  }
-  if(aoa && aoa[0]){
-    const hdr = aoa[0].map(h=>String(h).toLowerCase());
-    const sIdx = hdr.indexOf("sermon");
-    const dIdx = hdr.indexOf("date")>-1 ? hdr.indexOf("date")
-               : (hdr.indexOf("servicedate")>-1 ? hdr.indexOf("servicedate") : hdr.indexOf("service date"));
-    if(!sermon && sIdx>=0) sermon = aoa[1]?.[sIdx] || "";
-    if(!serviceDate && dIdx>=0){
-      const d = excelSerialToDate(aoa[1]?.[dIdx]) || new Date(aoa[1]?.[dIdx]);
-      if(!isNaN(d)) serviceDate = d;
-    }
-  }
-  return { sermon, serviceDate };
-}
-
-// ---------- stories (Wikipedia) ----------
-const STORY_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-function getStoryCache(){ try{ return JSON.parse(localStorage.getItem("songStoryCache")||"{}"); }catch{ return {}; } }
-function setStoryCache(cache){ localStorage.setItem("songStoryCache", JSON.stringify(cache)); }
-async function fetchWikipediaStory(title){
-  const key = title.trim().toLowerCase();
-  const cache = getStoryCache();
-  const now = Date.now();
-  if (cache[key] && (now - cache[key].ts) < STORY_TTL_MS) return cache[key].data;
-
-  const q = `${title} song hymn meaning`;
+  // Members
   try{
-    const sr = await fetch(`https://en.wikipedia.org/api/rest_v1/search/page?q=${encodeURIComponent(q)}&limit=5`);
-    if(sr.ok){
-      const sdata = await sr.json();
-      const candidate = (sdata?.pages||[])[0];
-      if(candidate && candidate.title){
-        const sum = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(candidate.title)}`);
-        if(sum.ok){
-          const j = await sum.json();
-          const data = {
-            summary: j.extract || "",
-            url: j.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(candidate.title)}`
-          };
-          cache[key] = { ts: now, data }; setStoryCache(cache);
-          return data;
-        }
-      }
-    }
-  }catch(_e){ /* ignore */ }
-  const empty = { summary: "", url: "" };
-  cache[key] = { ts: now, data: empty }; setStoryCache(cache);
-  return empty;
-}
-function storyCellHTML(text, url){
-  if(!text && !url) return `<span class="story-cell dim">—</span>`;
-  const short = text && text.length>220 ? (text.slice(0,217) + "…") : (text || "—");
-  const link = url ? ` <a href="${url}" target="_blank" rel="noopener">Source</a>` : "";
-  return `<span class="story-cell">${short}${link}</span>`;
-}
-async function renderSetlistWithStories(containerSel, aoa){
-  const el = $(containerSel);
-  if(!aoa || aoa.length===0){ el.innerHTML = `<p class="dim">No data.</p>`; return; }
-
-  const headers = aoa[0].map(h => String(h));
-  const lower = headers.map(h=>h.toLowerCase());
-  const songIdx = lower.indexOf("song") !== -1 ? lower.indexOf("song") : lower.indexOf("title");
-  const storyIdxExcel = lower.indexOf("story");
-
-  const finalHeaders = [...headers, "Story"];
-  let html = "<table><tr>" + finalHeaders.map(h=>`<th class="small">${h}</th>`).join("") + "</tr>";
-
-  const rowsMeta = [];
-  aoa.slice(1).forEach((row, rIdx)=>{
-    const cells = row.map(c => `<td class="small">${String(c ?? "")}</td>`).join("");
-    const placeholderId = `${containerSel.replace("#","")}-story-${rIdx}`;
-    const storyProvided = storyIdxExcel >= 0 ? String(row[storyIdxExcel]||"").trim() : "";
-    const storyCell = storyProvided
-      ? storyCellHTML(storyProvided, "")
-      : `<span id="${placeholderId}" class="story-cell dim">Searching…</span>`;
-    html += `<tr>${cells}<td>${storyCell}</td></tr>`;
-    rowsMeta.push({ title: songIdx>=0 ? (row[songIdx]||"").toString().trim() : "", placeholderId, storyProvided });
-  });
-  html += "</table>";
-  el.innerHTML = html;
-
-  for(const m of rowsMeta){
-    if(!m.title || m.storyProvided) continue;
-    const { summary, url } = await fetchWikipediaStory(m.title);
-    const target = document.getElementById(m.placeholderId);
-    if(target){ target.outerHTML = storyCellHTML(summary, url); }
+    const rows = await fetchExcel(XLSX_SOURCES.members);
+    // Expect columns: Name, Role
+    const headers = Object.keys(rows[0]||{});
+    const mRows = rows.map(r=>[r.Name || r.NAME || "", r.Role || r.ROLE || ""]);
+    $("#members-table").innerHTML = tableFromRows(["Name","Role"], mRows);
+  }catch(e){
+    $("#members-table").innerHTML = `<div class="dim">Failed to load members.</div>`;
   }
+
+  $$("#year").forEach(el=>el.textContent = new Date().getFullYear());
 }
 
-// ---------- load setlists into Reporting page ----------
-async function loadSetlistsIntoReporting(){
-  const items = await listDir(PATHS.setlistsDir);
-  const dated = items
-    .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
-    .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-    .sort((a,b)=> a.date - b.date);
-
-  let nextRendered = false;
-
-  // Prefer special current week if provided
+async function renderReporting(){
+  // Load full setlist from Excel (all rows)
+  let rows = [];
   try{
-    const r = await fetch(rawURL(PATHS.specialCurrent), { method:"HEAD" });
-    if (r.ok){
-      const wb = await fetchWB(PATHS.specialCurrent);
-      const aoa = firstSheetAOA(wb);
-      const { sermon, serviceDate } = parseMeta(wb, aoa);
-      $("#next-date").textContent = serviceDate ? niceDate(serviceDate) : niceDate(new Date());
-      await renderSetlistWithStories("#next-setlist", aoa);
-      $("#next-sermon").textContent = sermon ? `Sermon: ${sermon}` : "";
-
-      // Last week from archive
-      let last = null;
-      if (serviceDate) {
-        const before = dated.filter(f => f.date < serviceDate);
-        last = before[before.length - 1] || null;
-      } else {
-        last = dated[dated.length - 1] || null;
-      }
-
-      if (last) {
-        $("#last-date").textContent = niceDate(last.date);
-        const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
-        const aoa2 = firstSheetAOA(wb2);
-        await renderSetlistWithStories("#last-setlist", aoa2);
-        const meta2 = parseMeta(wb2, aoa2);
-        $("#last-sermon").textContent = meta2.sermon ? `Sermon: ${meta2.sermon}` : "";
-      } else {
-        $("#last-date").textContent = "—";
-        $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
-      }
-
-      nextRendered = true;
-    }
-  }catch(_e){ /* ignore */ }
-
-  if (!nextRendered) {
-    if (dated.length === 0) {
-      $("#next-date").textContent = "No setlists yet.";
-      $("#next-setlist").innerHTML = `<p class="dim">Upload weekly files to <code>${PATHS.setlistsDir}/YYYY-MM-DD.xlsx</code> or provide <code>${PATHS.specialCurrent}</code>.</p>`;
-      $("#last-date").textContent = "—";
-      $("#last-setlist").innerHTML = `<p class="dim">—</p>`;
-      return { dated, specialMeta: null };
-    }
-
-    const today = new Date(); today.setHours(0,0,0,0);
-    let nextIdx = dated.findIndex(f => f.date >= today);
-    if (nextIdx === -1) nextIdx = dated.length - 1;
-
-    const next = dated[nextIdx];
-    const wb = await fetchWB(`${PATHS.setlistsDir}/${next.name}`);
-    const aoa = firstSheetAOA(wb);
-    await renderSetlistWithStories("#next-setlist", aoa);
-    $("#next-date").textContent = niceDate(next.date);
-    const meta = parseMeta(wb, aoa);
-    $("#next-sermon").textContent = meta.sermon ? `Sermon: ${meta.sermon}` : "";
-
-    const last = dated[nextIdx - 1] || (dated.length >= 2 ? dated[dated.length - 2] : null);
-    if (last) {
-      $("#last-date").textContent = niceDate(last.date);
-      const wb2 = await fetchWB(`${PATHS.setlistsDir}/${last.name}`);
-      const aoa2 = firstSheetAOA(wb2);
-      await renderSetlistWithStories("#last-setlist", aoa2);
-      const meta2 = parseMeta(wb2, aoa2);
-      $("#last-sermon").textContent = meta2.sermon ? `Sermon: ${meta2.sermon}` : "";
-    } else {
-      $("#last-date").textContent = "—";
-      $("#last-setlist").innerHTML = `<p class="dim">No prior week found.</p>`;
-    }
-  }
-
-  return { dated, specialMeta: null };
-}
-
-// ---------- analytics + CCLI status + CSV export (Reporting page) ----------
-async function buildAnalyticsAndCCLI(dated, specialMeta){
-  const currentYear = new Date().getFullYear();
-  const PD_YEAR_CUTOFF = currentYear - 96;
-
-  // If 'dated' not provided, recompute from folder
-  if (!dated){
-    const items = await listDir("setlists");
-    dated = items
-      .filter(it => it.type==="file" && /^\d{4}-\d{2}-\d{2}\.xlsx$/.test(it.name) && toDateFromName(it.name))
-      .map(it => ({ name: it.name, date: toDateFromName(it.name) }))
-      .sort((a,b)=> a.date - b.date);
-  }
-  const datedThisYear = (dated || []).filter(f => f.date && f.date.getFullYear() === currentYear);
-
-  const songInfo = new Map(); // title -> { plays, ccli, hasCCLI, pdFlag, year }
-
-  function coerceYear(v){
-    const n = Number(String(v||"").match(/\d{4}/)?.[0] || NaN);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  async function accumulateFromWB(wb){
-    const aoa = firstSheetAOA(wb);
-    if(!aoa || aoa.length===0) return;
-
-    const headers = aoa[0].map(h => String(h).toLowerCase());
-    const ti = headers.indexOf("song") !== -1 ? headers.indexOf("song") : headers.indexOf("title");
-    if(ti === -1) return;
-    const ccliIdx = headers.findIndex(h => /ccli/.test(h));
-    const pdIdx   = headers.findIndex(h => /(public\s*domain|ispublicdomain|\bpd\b)/.test(h));
-    const yrIdx   = headers.findIndex(h => /^year|yearpublished/.test(h));
-
-    for(const row of aoa.slice(1)){
-      const title = (row[ti] || "").toString().trim();
-      if(!title) continue;
-      const info = songInfo.get(title) || { plays:0, ccli:"", hasCCLI:false, pdFlag:false, year:null };
-      info.plays += 1;
-      if (ccliIdx >= 0 && row[ccliIdx] != null){
-        const c = String(row[ccliIdx]).trim();
-        if (c) { info.ccli ||= c; info.hasCCLI = info.hasCCLI || /\d+/.test(c) || c.length>0; }
-      }
-      if (pdIdx >= 0 && row[pdIdx] != null){
-        if (["1","true","yes","y","public domain","pd"].includes(String(row[pdIdx]).trim().toLowerCase())) info.pdFlag = true;
-      }
-      if (yrIdx >= 0 && row[yrIdx] != null){
-        const y = coerceYear(row[yrIdx]);
-        if (y && !info.year) info.year = y;
-      }
-      songInfo.set(title, info);
-    }
-  }
-
-  // Aggregate this year's archive
-  for (const f of datedThisYear) {
-    const wb = await fetchWB(`${PATHS.setlistsDir}/${f.name}`);
-    await accumulateFromWB(wb);
-  }
-
-  // Rankings
-  const entries = Array.from(songInfo.entries()).map(([t,i])=>[t,i.plays]).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
-  const top5 = entries.slice(0,5);
-  $("#top5").innerHTML = top5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("");
-  const bottom5 = entries.slice().sort((a,b)=> a[1]-b[1] || a[0].localeCompare(b[0])).slice(0,5);
-  $("#bottom5").innerHTML = bottom5.map(([t,c]) => `<li><strong>${t}</strong> — ${c} play${c>1?"s":""}</li>`).join("");
-
-  function classify(info){
-    const pdByFlag = info.pdFlag === true;
-    const pdByYear = info.year && info.year <= PD_YEAR_CUTOFF;
-    if (pdByFlag || pdByYear) return "Public Domain";
-    if (info.hasCCLI) return "Report (Licensed)";
-    return "Needs Review";
-  }
-
-  // Library table
-  const titles = Array.from(songInfo.keys()).sort((a,b)=> a.localeCompare(b));
-  let html = "<table><tr><th>Song</th><th>Plays</th><th>Status</th></tr>";
-  for (const t of titles) {
-    const info = songInfo.get(t);
-    const status = classify(info);
-    html += `<tr><td>${t}</td><td>${info.plays}</td><td>${status}</td></tr>`;
-  }
-  html += "</table>";
-  $("#library-table").innerHTML = html;
-
-  // Buckets + CSV export data
-  const reportRows = [["Song","Plays","CCLI"]];
-  const pdRows = [["Song","Plays","Basis"]];
-
-  for (const t of titles){
-    const info = songInfo.get(t);
-    const status = classify(info);
-    if (status === "Public Domain"){
-      const basis = info.pdFlag ? "Explicit PD" : (info.year ? `Year ≤ ${PD_YEAR_CUTOFF}` : "PD heuristic");
-      pdRows.push([t, String(info.plays), basis]);
-    } else if (status === "Report (Licensed)") {
-      reportRows.push([t, String(info.plays), info.ccli || ""]);
-    }
-  }
-
-  renderTable(reportRows, "#ccli-report");
-  renderTable(pdRows, "#ccli-pd");
-
-  // Charts
-  renderCharts(entries);
-
-  // CSV export
-  $("#export-csv")?.addEventListener("click", ()=>{
-    const csv = reportRows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `ccli_report_${currentYear}.csv`;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  });
-}
-
-// ---------- charts (Chart.js) ----------
-let barChart, pieChart;
-function renderCharts(entries){
-  const barEl = document.getElementById("barChart");
-  const pieEl = document.getElementById("pieChart");
-  if (barChart) { barChart.destroy(); barChart = null; }
-  if (pieChart) { pieChart.destroy(); pieChart = null; }
-  if (!entries || entries.length === 0){
-    if (barEl) barEl.replaceWith(barEl.cloneNode(true));
-    if (pieEl) pieEl.replaceWith(pieEl.cloneNode(true));
+    rows = await fetchExcel(XLSX_SOURCES.setlist);
+  }catch(e){
+    $("#next-week-table").innerHTML = `<div class="dim">Failed to load setlist.</div>`;
     return;
   }
-  const topN = entries.slice(0,10);
-  const labels = topN.map(([t])=>t);
-  const counts = topN.map(([,c])=>c);
-  if (barEl){
-    barChart = new Chart(barEl.getContext("2d"), {
-      type: "bar",
-      data: { labels, datasets: [{ label: "Plays (Top 10)", data: counts }] },
-      options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } }, plugins:{ legend:{ display:false } } }
-    });
+
+  // Normalize: expected columns -> Date, Song, Topic, Credit, CCLI, PublicDomain, Year
+  const norm = rows.map(r=>({
+    Date: r.Date || r.date || r.Sunday || r.ServiceDate || "",
+    Song: r.Song || r.Title || r.Name || "",
+    Topic: r.Topic || r.Theme || "",
+    Credit: r.Credit || r.Note || "",
+    CCLI: r.CCLI || r.Ccli || "",
+    PublicDomain: (String(r.PublicDomain||"").toLowerCase()==="true"),
+    Year: r.Year || r.Published || ""
+  })).filter(r=>r.Song);
+
+  // Identify next & last by date
+  const byDate = [...norm].sort((a,b)=> new Date(a.Date) - new Date(b.Date));
+  const uniqueDates = [...new Set(byDate.map(r=>r.Date).filter(Boolean))].sort((a,b)=> new Date(a)-new Date(b));
+  const nextDate = uniqueDates[uniqueDates.length-1];
+  const lastDate = uniqueDates.length>1 ? uniqueDates[uniqueDates.length-2] : null;
+
+  // Helper to enrich a row with story/author when Credit empty
+  async function enrichRow(r){
+    if(r.Credit) return {...r, Story:r.Credit, Author:""}; // prefer your note
+    const sum = await wikiSummary(r.Song);
+    const story = sum?.extract || "";
+    const author = inferAuthors(r.Song, story);
+    return {...r, Story: story, Author: author};
   }
-  const pieN = entries.slice(0,8);
-  const pieLabels = pieN.map(([t])=>t);
-  const pieCounts = pieN.map(([,c])=>c);
-  if (pieEl){
-    pieChart = new Chart(pieEl.getContext("2d"), {
-      type: "pie",
-      data: { labels: pieLabels, datasets: [{ data: pieCounts }] },
-      options: { responsive:true, maintainAspectRatio:false }
-    });
+
+  // Render “This Coming Week”
+  if(nextDate){
+    $("#next-date").textContent = fmtDate(nextDate);
+    const nextRows = byDate.filter(r=>r.Date===nextDate);
+    const enrichedNext = await Promise.all(nextRows.map(enrichRow));
+    $("#next-week-table").innerHTML = tableFromRows(
+      ["Date","Song","Author","Credit/Story","Topic"],
+      enrichedNext.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
+    );
+  } else {
+    $("#next-week-table").innerHTML = `<div class="dim">No upcoming setlist found.</div>`;
   }
+
+  // Render “Last Week”
+  if(lastDate){
+    $("#last-date").textContent = fmtDate(lastDate);
+    const lastRows = byDate.filter(r=>r.Date===lastDate);
+    const enrichedLast = await Promise.all(lastRows.map(enrichRow));
+    $("#last-week-table").innerHTML = tableFromRows(
+      ["Date","Song","Author","Credit/Story","Topic"],
+      enrichedLast.map(s=>[fmtDate(s.Date), s.Song, s.Author||"", s.Story||"", s.Topic||""])
+    );
+  } else {
+    $("#last-week-table").innerHTML = `<div class="dim">No prior week found.</div>`;
+  }
+
+  // Build analytics for current year
+  const yearNow = new Date().getFullYear();
+  const currentYearRows = norm.filter(r=> new Date(r.Date).getFullYear() === yearNow);
+
+  buildAnalytics(currentYearRows);
+
+  // CSV export (from CCLI table)
+  $("#btn-export-ccli")?.addEventListener("click", exportCcliCsv);
+
+  $$("#year").forEach(el=>el.textContent = new Date().getFullYear());
 }
 
-// ---------- Page dispatcher ----------
-document.addEventListener("DOMContentLoaded", async ()=>{
-  const page = document.body.getAttribute("data-page");
+function buildAnalytics(rows){
+  // Aggregate plays per song
+  const plays = new Map();
+  for(const r of rows){
+    const s = r.Song.trim();
+    if(!s) continue;
+    plays.set(s, (plays.get(s)||0)+1);
+  }
 
-  if (page === "home"){
-    await loadAnnouncements();
-    await loadBibleStudy();
-    // Members loaded on Home (kept here to ensure order)
-    const target = "#members-table";
-    try{
-      const wb = await fetchWB(PATHS.members);
-      const aoa = firstSheetAOA(wb);
-      if(!aoa || aoa.length === 0){ $(target).textContent = "No members listed."; return; }
-      renderTable(aoa, target);
-    }catch{
-      $(target).innerHTML = `<p class="dim">Unable to load members. Ensure <code>${PATHS.members}</code> exists.</p>`;
+  const sorted = [...plays.entries()].sort((a,b)=> b[1]-a[1]);
+  const top5 = sorted.slice(0,5);
+  const bottom5 = sorted.slice(-5).reverse();
+
+  $("#top5").innerHTML = top5.map(([s,c])=>`<li>${s} — <span class="dim">${c}</span></li>`).join("") || `<li class="dim">No data</li>`;
+  $("#bottom5").innerHTML = bottom5.map(([s,c])=>`<li>${s} — <span class="dim">${c}</span></li>`).join("") || `<li class="dim">No data</li>`;
+
+  // Charts
+  const labels = top5.map(([s])=>s);
+  const data = top5.map(([,c])=>c);
+  const barCtx = document.getElementById("barChart");
+  const pieCtx = document.getElementById("pieChart");
+  if(barCtx && window.Chart){
+    new Chart(barCtx, { type:"bar", data:{ labels, datasets:[{ label:"Plays", data }] }, options:{ plugins:{legend:{display:false}} } });
+  }
+  if(pieCtx && window.Chart){
+    new Chart(pieCtx, { type:"pie", data:{ labels, datasets:[{ data }] } });
+  }
+
+  // Library table + CCLI buckets
+  const lib = new Map(); // song -> {plays, ccli, pd, year}
+  for(const r of rows){
+    const s = r.Song.trim(); if(!s) continue;
+    const e = lib.get(s) || {plays:0, ccli:"", pd:false, year:null};
+    e.plays += 1;
+    if(r.CCLI) e.ccli = r.CCLI;
+    if(r.PublicDomain) e.pd = true;
+    if(r.Year) e.year = Number(r.Year);
+    lib.set(s, e);
+  }
+
+  $("#library-table").innerHTML = tableFromRows(
+    ["Song","Plays","Status"],
+    [...lib.entries()].sort((a,b)=> b[1].plays - a[1].plays).map(([s,v])=>{
+      const isPD = v.pd || (v.year && v.year <= 1929);
+      const status = v.ccli && !isPD ? "Report to CCLI" : (isPD ? "Public Domain" : "Unknown");
+      return [s, v.plays, status];
+    })
+  );
+
+  const ccliRows = [], pdRows = [];
+  for(const [s,v] of lib){
+    const isPD = v.pd || (v.year && v.year <= 1929);
+    if(v.ccli && !isPD){
+      ccliRows.push([s, v.plays, v.ccli]);
+    } else if(isPD){
+      pdRows.push([s, v.plays, v.pd ? "PublicDomain: TRUE" : (v.year? `Year: ${v.year}` : "—")]);
     }
   }
+  $("#ccli-report").innerHTML = tableFromRows(["Song","Plays","CCLI"], ccliRows);
+  $("#ccli-pd").innerHTML    = tableFromRows(["Song","Plays","Basis"], pdRows);
+}
 
-  if (page === "reporting"){
-    const { dated, specialMeta } = await loadSetlistsIntoReporting();
-    await buildAnalyticsAndCCLI(dated, specialMeta);
-  }
+function exportCcliCsv(){
+  const rows = Array.from(document.querySelectorAll("#ccli-report table tr"))
+    .map(tr=> Array.from(tr.children).map(td=> `"${td.textContent.replaceAll('"','""')}"`));
+  const csv = rows.map(r=> r.join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "ccli_report.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
 
-  // No library page anymore
-});
+/* Hymnal mock index (1–352) */
+function renderHymnal(){
+  const index = Array.from({length:352}, (_,i)=>({number: i+1, title:`Song #${i+1}`, pdf:`pdf/${i+1}.pdf`}));
+  const ul = $("#song-index");
+  ul.innerHTML = index.slice(0,200).map(it=>`<li data-pdf="${it.pdf}"><strong>#${it.number}</strong> — ${it.title}</li>`).join("");
+  ul.addEventListener("click", e=>{
+    const li = e.target.closest("li"); if(!li) return;
+    $("#pdf-frame").src = li.dataset.pdf;
+  });
+  $("#song-search").addEventListener("input", e=>{
+    const q = e.target.value.toLowerCase();
+    ul.innerHTML = index.filter(it=> String(it.number).includes(q) || it.title.toLowerCase().includes(q))
+      .slice(0,200).map(it=>`<li data-pdf="${it.pdf}"><strong>#${it.number}</strong> — ${it.title}</li>`).join("");
+  });
+  $$("#year").forEach(el=>el.textContent = new Date().getFullYear());
+}
+
+/* ========= ROUTER ========= */
+(function init(){
+  const path = (location.pathname || "").split("/").pop() || "index.html";
+  if(path === "index.html") renderHome();
+  else if(path === "reporting.html") renderReporting();
+  else if(path === "hymnal.html") renderHymnal();
+  $$("#year").forEach(el=>el.textContent = new Date().getFullYear());
+})();
