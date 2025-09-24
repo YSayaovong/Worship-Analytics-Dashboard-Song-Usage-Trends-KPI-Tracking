@@ -1,17 +1,25 @@
-// ---------- CONFIG ----------
+/* =========================
+   CONFIG
+========================= */
 const GITHUB = { owner: "YSayaovong", repo: "HFBC_Praise_Worship", branch: "main" };
-
 const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
-  reminders: "reminders/reminders.xlsx", // optional
+  reminders: "reminders/reminders.xlsx",   // optional; falls back to two static reminders
   setlist: "setlist/setlist.xlsx"
 };
 
-// ---------- UTIL ----------
+/* =========================
+   UTIL
+========================= */
 const $ = (sel, root=document) => root.querySelector(sel);
 const fmtDate = d => d ? d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" }) : "—";
 const escapeHtml = s => s.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+
+function todayLocalMidnight(){
+  const t = new Date();
+  return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+}
 
 function rawUrl(pathRel){
   return `https://raw.githubusercontent.com/${GITHUB.owner}/${GITHUB.repo}/${GITHUB.branch}/${pathRel}`;
@@ -22,7 +30,7 @@ async function fetchWB(pathRel){
   const res = await fetch(url);
   if(!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
   const ab = await res.arrayBuffer();
-  return XLSX.read(ab, { type: "array", cellDates: true }); // let xlsx give us JS Dates when available
+  return XLSX.read(ab, { type: "array", cellDates: true });
 }
 
 function aoaFromWB(wb){
@@ -30,25 +38,19 @@ function aoaFromWB(wb){
   return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
 }
 
-// Robust Excel/JS/string date → local Date at midnight (prevents TZ shifts)
+// Robust Excel/JS/string date → local midnight Date (no timezone drift)
 function toLocalDate(val){
   if(val == null || val === "") return null;
-
-  // 1) Already a JS Date
   if (val instanceof Date && !isNaN(val)) {
     return new Date(val.getFullYear(), val.getMonth(), val.getDate());
   }
-
-  // 2) Excel serial number
   if (typeof val === "number") {
     const o = XLSX.SSF.parse_date_code(val);
     if (o && o.y && o.m && o.d) return new Date(o.y, o.m - 1, o.d);
   }
-
-  // 3) Common string formats (m/d/yyyy, yyyy-mm-dd, etc.)
   const s = String(val).trim();
-  const mdyyyy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/; // 10/4/2025 or 10-4-2025
-  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;       // 2025-10-04
+  const mdyyyy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/;
+  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/;
 
   let m;
   if ((m = s.match(mdyyyy))) {
@@ -59,10 +61,8 @@ function toLocalDate(val){
     return new Date(+m[1], +m[2] - 1, +m[3]);
   }
 
-  // 4) Fallback to Date parser, then normalize to midnight local
   const d = new Date(s);
   if (!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
   return null;
 }
 
@@ -80,14 +80,13 @@ function renderAOATable(aoa, targetSel){
   el.innerHTML = html;
 }
 
-function sameYMD(a,b){ return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
-
-// ---------- LOADERS (Announcements / Reminders / Members) ----------
+/* =========================
+   LOADERS (Announcements / Reminders / Members)
+========================= */
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
     const aoa = aoaFromWB(wb);
-    // Format any "Date" column
     const hdr = aoa[0].map(x=>String(x).toLowerCase());
     const idxDate = hdr.findIndex(h=>["date","service date"].includes(h));
     const out = idxDate === -1 ? aoa : aoa.map((row,i)=>{
@@ -125,12 +124,14 @@ async function loadMembers(){
   }
 }
 
-// ---------- SETLIST (Two most recent dates; Sermon; Story toggle; NO "Key") ----------
+/* =========================
+   SETLIST (Coming Up / Previous) + Analytics
+========================= */
 async function loadSetlistsAndAnalytics(){
   try{
     const wb = await fetchWB(PATHS.setlist);
     const aoa = aoaFromWB(wb);
-    if(!aoa || aoa.length < 2){ $("#setlist-this").innerHTML=`<p class="dim">No rows.</p>`; return; }
+    if(!aoa || aoa.length < 2){ $("#setlist-next").innerHTML=`<p class="dim">No rows.</p>`; return; }
 
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
@@ -141,33 +142,36 @@ async function loadSetlistsAndAnalytics(){
 
     const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim()!==""));
 
-    // Group rows by local date
-    const groups = new Map(); // key -> { date, sermon, rows:[] }
+    // Group by date (only rows with a song)
+    const groups = [];
     for(const r of rows){
-      const d = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
-      const key = d ? d.toISOString().slice(0,10) : "__nodate__";
+      const date = idxDate !== -1 ? toLocalDate(r[idxDate]) : null;
+      const song = idxSong !== -1 ? String(r[idxSong] ?? "").trim() : "";
+      const notes = idxNotes !== -1 ? String(r[idxNotes] ?? "") : "";
       const sermon = idxSermon !== -1 ? String(r[idxSermon] ?? "").trim() : "";
-      if(!groups.has(key)) groups.set(key, { date:d, sermon: sermon || "", rows:[] });
-      const g = groups.get(key);
+      if(!song) continue;
+
+      const key = date ? date.getTime() : NaN;
+      let g = groups.find(x => (x.date && date && x.date.getTime()===key));
+      if(!g){
+        g = { date, sermon: sermon || "", rows: [] };
+        groups.push(g);
+      }
       if(sermon && !g.sermon) g.sermon = sermon;
-      g.rows.push(r);
+      g.rows.push({ song, notes });
     }
 
-    // Sort by date desc (nodate last)
-    const arr = [...groups.values()].sort((a,b)=>{
-      if(a.date && b.date) return b.date - a.date;
-      if(a.date && !b.date) return -1;
-      if(!a.date && b.date) return 1;
-      return 0;
-    });
+    const dated = groups.filter(g=>g.date).sort((a,b)=> a.date - b.date);
+    const today = todayLocalMidnight();
 
-    const thisG = arr[0];
-    const lastG = arr[1];
+    // Coming Up: earliest future date; Previous: latest date <= today
+    const next = dated.find(g => g.date > today) || null;
+    const prev = [...dated].filter(g => g.date <= today).slice(-1)[0] || null;
 
-    renderSetlistGroup(thisG, "#setlist-this-meta", "#setlist-this", idxSong, idxNotes);
-    renderSetlistGroup(lastG, "#setlist-last-meta", "#setlist-last", idxSong, idxNotes);
+    renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
+    renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // --- Analytics based on ALL rows ---
+    // --- Analytics from ALL rows ---
     if(idxSong !== -1){
       const counts = new Map();
       for(const r of rows){
@@ -189,40 +193,33 @@ async function loadSetlistsAndAnalytics(){
     }
   }catch(e){
     console.error(e);
-    $("#setlist-this").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
-    $("#setlist-last").innerHTML = `<p class="dim">—</p>`;
+    $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
+    $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
   }
 }
 
-function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxNotes){
+function renderSetlistGroup(group, metaSel, tableSel){
   if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
   $(metaSel).textContent = `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
 
-  // Header WITHOUT "Key"
+  // Columns: Song | Notes | Story
   const header = ["Song","Notes",""];
-  // Build all rows for this date group
-  const rows = group.rows.map((r,i)=>{
-    const song = idxSong !== -1 ? String(r[idxSong] ?? "") : "";
-    const note = idxNotes !== -1 ? String(r[idxNotes] ?? "") : "";
-    return { song, note, i };
-  });
-
-  // Render table + story toggles
   let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
-  rows.forEach(({song,note,i})=>{
+  group.rows.forEach((row, i)=>{
+    const id = `${tableSel.replace("#","")}-story-${i}`;
     html += `<tr>
-      <td>${escapeHtml(song)}
-        <span class="story-btn" data-song="${escapeHtml(song)}" data-target="story-${tableSel}-${i}">Story</span>
-        <div id="story-${tableSel}-${i}" class="story" style="display:none;"></div>
+      <td>${escapeHtml(row.song)}
+        <span class="story-btn" data-song="${escapeHtml(row.song)}" data-target="${id}">Story</span>
+        <div id="${id}" class="story" style="display:none;"></div>
       </td>
-      <td>${escapeHtml(note)}</td>
+      <td>${escapeHtml(row.notes)}</td>
       <td></td>
     </tr>`;
   });
   html += `</tbody></table>`;
   $(tableSel).innerHTML = html;
 
-  // Wire story buttons
+  // Story toggles
   $(tableSel).querySelectorAll(".story-btn").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       const box = document.getElementById(btn.getAttribute("data-target"));
@@ -239,7 +236,9 @@ function renderSetlistGroup(group, metaSel, tableSel, idxSong, idxNotes){
   });
 }
 
-// ---------- Song story (Wikipedia) ----------
+/* =========================
+   Song story (Wikipedia)
+========================= */
 async function fetchSongStory(query){
   try{
     let summary = await wikipediaSummary(query);
@@ -271,7 +270,9 @@ async function wikipediaOpenSearch(q){
   return j?.[1]?.[0] || "";
 }
 
-// ---------- Charts (pie & bar) ----------
+/* =========================
+   Charts (pie & bar)
+========================= */
 let pieInst, barInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
@@ -295,7 +296,9 @@ function drawBar(entries){
   });
 }
 
-// ---------- BOOT ----------
+/* =========================
+   BOOT
+========================= */
 document.addEventListener("DOMContentLoaded", async ()=>{
   await loadAnnouncements();
   await loadReminders();

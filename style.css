@@ -19,7 +19,7 @@ html,body{
 .container{ max-width:1100px; margin:0 auto; padding:16px; }
 
 .site-header{ border-bottom:1px solid var(--border); background:#0d131b; }
-.site-header h1{ margin:0; font-size:1.3rem; }
+.site-header h1{ margin:0; font-size:1.25rem; }
 
 .section{ margin:24px 0; }
 .section-title{ margin:0 0 12px; font-size:1.15rem; }

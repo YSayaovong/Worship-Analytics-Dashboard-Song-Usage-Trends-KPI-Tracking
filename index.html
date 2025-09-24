@@ -5,6 +5,7 @@
   <title>HFBC – Praise & Worship</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -26,7 +27,7 @@
       <div class="card">
         <h2 class="section-title">Reminders</h2>
         <div id="reminders-table" class="table like-card">
-          <!-- If reminders.xlsx exists it will render; else fall back to these two rows -->
+          <!-- Fallback content; will be replaced if reminders.xlsx exists -->
           <ul class="reminders">
             <li><strong>Thursday Practice</strong>: 6:00pm–8:00pm</li>
             <li><strong>Sunday Practice</strong>: 8:40am–9:30am</li>
@@ -43,22 +44,22 @@
       </div>
     </section>
 
-    <!-- Row 3: Setlists -->
+    <!-- Row 3: Setlists (Coming Up / Previous) -->
     <section id="setlist-section" class="section">
       <div class="card">
-        <h2 class="section-title">This Week’s Setlist</h2>
-        <div id="setlist-this-meta" class="dim"></div>
-        <div id="setlist-this" class="table like-card">Loading…</div>
+        <h2 class="section-title">Coming Up Set</h2>
+        <div id="setlist-next-meta" class="dim"></div>
+        <div id="setlist-next" class="table like-card">Loading…</div>
       </div>
 
       <div class="card mt16">
-        <h2 class="section-title">Last Week’s Setlist</h2>
-        <div id="setlist-last-meta" class="dim"></div>
-        <div id="setlist-last" class="table like-card">Loading…</div>
+        <h2 class="section-title">Previous Set</h2>
+        <div id="setlist-prev-meta" class="dim"></div>
+        <div id="setlist-prev" class="table like-card">Loading…</div>
       </div>
     </section>
 
-    <!-- Row 4: Analytics (no line chart) -->
+    <!-- Row 4: Analytics -->
     <section id="analytics-section" class="section">
       <div class="card">
         <h2 class="section-title">Song Analytics</h2>
@@ -90,7 +91,7 @@
 
   <footer class="site-footer">
     <div class="container dim">
-      <small>Data sources: announcements.xlsx, members.xlsx, (optional) reminders.xlsx, setlist.xlsx — all public on GitHub.</small>
+      <small>Data sources: announcements.xlsx, members.xlsx, (optional) reminders.xlsx, setlist.xlsx — public on GitHub.</small>
     </div>
   </footer>
 
