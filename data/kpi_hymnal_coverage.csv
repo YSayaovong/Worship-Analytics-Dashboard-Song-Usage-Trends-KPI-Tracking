@@ -1,4 +1,2 @@
-metric,value
-hymnal_coverage_used,0.0
-hymnal_coverage_unused,352.0
-hymnal_coverage_percent,0.0
+Hymnal_Songs,Used_Hymnal_Songs,Coverage_%
+75,11,14.67
