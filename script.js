@@ -106,6 +106,21 @@ function findFirst(headers, candidates){
   return -1;
 }
 
+/* ---------- Hard-remove right-side analytics (chart + list) ---------- */
+function nukeRightAnalytics(){
+  // Remove the right-hand list (assumes #bottom5 exists inside a <div>)
+  const rightListWrap = document.querySelector('#bottom5')?.closest('div');
+  if (rightListWrap) rightListWrap.remove();
+
+  // Remove the right-hand chart card via its canvas id
+  const rightCardById = document.querySelector('#barChart')?.closest('.chart-card');
+  if (rightCardById) rightCardById.remove();
+
+  // Fallback: remove the last chart-card in the charts grid (second pie)
+  const chartsWrap = document.querySelector('.charts-2');
+  if (chartsWrap && chartsWrap.children.length > 1) chartsWrap.lastElementChild.remove();
+}
+
 /* ---------- WORSHIP PRACTICE (table like Special Practice) ---------- */
 function nextOccurrence(targetDow){
   const today = todayLocalMidnight();
@@ -301,7 +316,7 @@ async function loadSetlistsAndAnalytics(){
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
     const idxDate   = findFirst(hdr, ["date","service date"]);
-    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
+    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]); // kept for meta
     const idxSong   = findFirst(hdr, ["song","title","song title"]);
 
     const rows = aoa.slice(1).filter(r => r && r.some(c => String(c).trim()!==""));
@@ -350,20 +365,16 @@ async function loadSetlistsAndAnalytics(){
       ? top5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
       : `<li class="dim">No data</li>`;
 
-    // Hide the right-hand list (if present)
-    hideRightList();
-
-    // Chart: only left pie
+    // Draw only the left pie
     drawSongsPie(songCounts.slice(0,7));
 
-    // Hide the right-hand chart card (if present)
-    hideRightChart();
+    // Ensure right-hand analytics cannot appear
+    nukeRightAnalytics();
   }catch(e){
     console.error(e);
     $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
     $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
-    hideRightList();
-    hideRightChart();
+    nukeRightAnalytics();
   }
 }
 
@@ -481,20 +492,11 @@ function drawSongsPie(entries){
   });
 }
 
-/* ---------- Hide right-hand analytics (chart + list) ---------- */
-function hideRightChart(){
-  const rightCanvas = $("#barChart");
-  const rightCard = rightCanvas ? rightCanvas.closest(".chart-card") : null;
-  if(rightCard) rightCard.style.display = "none";
-}
-function hideRightList(){
-  const rightList = $("#bottom5");
-  const rightListWrap = rightList ? rightList.closest("div") : null; // the <div> that holds header + list
-  if(rightListWrap) rightListWrap.style.display = "none";
-}
-
 /* ---------- BOOT ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
+  // Ensure the 2nd pie + right-hand list are gone before anything renders
+  nukeRightAnalytics();
+
   loadPractice();
   try{ await loadMembers(); }catch{}
   try{ await loadSpecialPractice(); }catch{}
