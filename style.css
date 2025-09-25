@@ -1,14 +1,14 @@
-/* Dark look that matches your previous cards/tables */
+/* Dark UI close to your original cards/tables */
 :root{
-  --bg: #0b1020;        /* page background */
-  --card: #0f172a;      /* card background */
-  --border: #1f2937;    /* card/table borders */
-  --text: #e5e7eb;      /* primary text */
-  --muted: #9aa3b2;     /* secondary text */
+  --bg: #0b1020;
+  --card: #0f172a;
+  --border: #1f2937;
+  --text: #e5e7eb;
+  --muted: #9aa3b2;
 }
 
 *{ box-sizing: border-box; }
-html,body{
+html, body{
   margin:0; padding:0;
   background: var(--bg);
   color: var(--text);
@@ -16,11 +16,11 @@ html,body{
   line-height: 1.5;
 }
 
-.container{
-  max-width: 1100px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
+.container{ max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+.page-header{ margin-bottom: 1rem; }
+.page-header h1{ margin:0 0 .25rem 0; font-size: 1.5rem; }
+.muted{ color: var(--muted); }
 
 .card{
   background: var(--card);
@@ -32,16 +32,15 @@ html,body{
 }
 
 h2{ margin: 0 0 .75rem 0; font-size: 1.2rem; }
-.muted{ color: var(--muted); margin-top:.25rem; }
 
 .bullets{ padding-left: 1.25rem; margin: .25rem 0 .25rem; }
 .bullets li{ margin: .35rem 0; }
 
-.table-wrap{ overflow-x: auto; }
-.table{ width:100%; border-collapse: collapse; }
+.table-wrap{ overflow-x:auto; }
+.table{ width:100%; border-collapse:collapse; }
 .table th, .table td{
-  padding: .6rem .75rem;
+  padding:.6rem .75rem;
   border-bottom: 1px solid var(--border);
-  text-align: left;
+  text-align:left;
 }
-.table th{ font-weight: 600; }
+.table th{ font-weight:600; }

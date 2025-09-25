@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HFBC – Worship & Announcements</title>
 
-  <!-- Keep this exact filename so styles load -->
+  <!-- Keep filename exactly as shown -->
   <link rel="stylesheet" href="style.css" />
 
   <!-- Libraries & app script -->
@@ -14,20 +14,24 @@
 </head>
 <body>
   <main class="container">
-    <!-- Worship Practice (we keep your list; JS strips leading labels) -->
+    <!-- Header / Hero (kept simple; style comes from CSS) -->
+    <header class="page-header">
+      <h1>HFBC – Worship Info</h1>
+      <p class="muted">Live updates from Excel files on GitHub.</p>
+    </header>
+
+    <!-- Worship Practice (your weekly list; JS strips labels only) -->
     <section class="card">
       <h2>Worship Practice</h2>
       <ul id="worship-practice-list" class="bullets">
-        <!-- Your existing <li> items can stay; JS only removes the words before the times -->
-        <!-- Example:
+        <!-- Example entries; keep/edit as you wish. Only the leading words are removed. -->
         <li>Thursday Practice: 6:00pm–8:00pm</li>
         <li>Sunday Practice: 8:40am–9:30am</li>
-        -->
       </ul>
-      <p class="muted">Practice times are also listed under “Special Practice.”</p>
+      <p class="muted">Detailed dates/times are listed under “Special Practice.”</p>
     </section>
 
-    <!-- Special Practice -->
+    <!-- Special Practice (driven by Excel) -->
     <section class="card">
       <h2>Special Practice</h2>
       <div class="table-wrap">
@@ -40,26 +44,44 @@
             </tr>
           </thead>
           <tbody id="special-practice-body">
-            <!-- filled by script.js -->
+            <!-- Filled by script.js -->
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- Worship Team Members (leave your existing markup here, unchanged) -->
+    <!-- Worship Team Members (your existing content stays here) -->
     <section class="card">
       <h2>Worship Team Members</h2>
-      <div id="team-members">
-        <!-- your existing table/content -->
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Role</th><th>Availability</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Niam Vamyeejkoob</td><td>Worship Leader</td><td></td></tr>
+            <tr><td>Vamyeejkoob</td><td>Pianist</td><td></td></tr>
+            <tr><td>Seng</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Nhia</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Tsavhaumxeeb</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Npis</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Koobxwm</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Txhiajtswb</td><td>Singer</td><td></td></tr>
+            <tr><td>Niam Yauhan</td><td>Singer</td><td></td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <!-- Announcements -->
+    <!-- Announcements (driven by Excel) -->
     <section class="card">
       <h2>Announcements</h2>
       <ul id="announcements-list" class="bullets">
-        <!-- filled by script.js -->
+        <!-- Filled by script.js -->
       </ul>
+      <p class="muted">Shows English and Hmong. Only items from the last 31 days; newest first.</p>
     </section>
   </main>
 </body>
