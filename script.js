@@ -1,7 +1,6 @@
 /***** CONFIG: GitHub sources (blob URLs) *****/
 const SRC = {
   announcements: "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx",
-  bibleStudy:   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx",
   members:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx",
   setlist:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx",
   catalog:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/songs_catalog.csv",
@@ -52,25 +51,9 @@ const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct"
 function fmtDateOnly(dt) {
   return `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
 }
-function fmtTimeHM(dateLike) {
-  const d = new Date();
-  if (typeof dateLike === "string") {
-    // parse "6:30pm - 8:30pm" -> keep as-is
-    return dateLike;
-  }
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
-}
-function fmtRange(startH, startM, endH, endM) {
-  const d = new Date();
-  d.setHours(startH, startM, 0, 0);
-  const start = d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }).toLowerCase();
-  d.setHours(endH, endM, 0, 0);
-  const end = d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }).toLowerCase();
-  return `${start} to ${end}`;
-}
+function fmtRangeFromText(s) { return String(s || "").trim(); }
 function withinLastNDays(dt, n = 31) {
-  const today = new Date();
-  const start = new Date(); start.setDate(today.getDate() - n);
+  const today = new Date(); const start = new Date(); start.setDate(today.getDate() - n);
   return dt >= start && dt <= today;
 }
 
@@ -83,23 +66,26 @@ function nextWeeklyOccurrence(targetWeekday, startH, startM, endH, endM) {
   occ.setHours(startH, startM, 0, 0);
   const end = new Date(occ); end.setHours(endH, endM, 0, 0);
   if (now > end) occ.setDate(occ.getDate() + 7);
-  return { date: occ, startH, startM, endH, endM };
+  return { date: occ, range: `${toHM(startH,startM)} to ${toHM(endH,endM)}` };
+}
+function toHM(h,m){
+  const d=new Date(); d.setHours(h,m,0,0);
+  return d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}).toLowerCase();
 }
 function renderWeeklyPractices() {
   const ul = document.getElementById("weekly-practice-list");
   if (!ul) return;
   const thurs = nextWeeklyOccurrence(4, 18, 0, 20, 0); // Thurs 6–8pm
   const sun   = nextWeeklyOccurrence(0, 8, 40, 9, 30); // Sun 8:40–9:30am
-
-  const li1 = document.createElement("li");
-  li1.textContent = `${fmtDateOnly(thurs.date)} ${fmtRange(thurs.startH, thurs.startM, thurs.endH, thurs.endM)}`;
-  const li2 = document.createElement("li");
-  li2.textContent = `${fmtDateOnly(sun.date)} ${fmtRange(sun.startH, sun.startM, sun.endH, sun.endM)}`;
-
-  ul.innerHTML = ""; ul.appendChild(li1); ul.appendChild(li2);
+  ul.innerHTML = "";
+  [thurs, sun].forEach(({date, range}) => {
+    const li = document.createElement("li");
+    li.textContent = `${fmtDateOnly(date)} ${range}`;
+    ul.appendChild(li);
+  });
 }
 
-/***** ADDITIONAL PRACTICE (non-Thu/Sun) *****/
+/***** ADDITIONAL PRACTICE (non-Thu/Sun; reads "ADDITIONAL PRACTICE") *****/
 async function renderAdditionalPractice() {
   const tbody = document.getElementById("additional-practice-body");
   if (!tbody) return;
@@ -108,7 +94,8 @@ async function renderAdditionalPractice() {
     const normalized = rows.map((r) => {
       const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
       const date = excelToDate(o.date ?? o["practice date"] ?? o.day ?? "");
-      const time = String(o.time ?? o["practice time"] ?? "").trim();
+      // <-- this line picks up your column B label
+      const time = String(o["additional practice"] ?? o.time ?? o["practice time"] ?? "").trim();
       const notes = String(o.notes ?? o.note ?? "").trim();
       return { date, time, notes };
     }).filter(x => x.date && ![0,4].includes(x.date.getDay())) // exclude Sun(0), Thu(4)
@@ -118,7 +105,7 @@ async function renderAdditionalPractice() {
     if (!normalized.length) { tbody.innerHTML = `<tr><td colspan="3">No additional practices listed.</td></tr>`; return; }
     normalized.forEach(({date,time,notes}) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${time || "-"}</td><td>${notes || ""}</td>`;
+      tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${fmtRangeFromText(time) || "-"}</td><td>${notes || ""}</td>`;
       tbody.appendChild(tr);
     });
   } catch (e) {
@@ -160,7 +147,8 @@ async function renderAnnouncements() {
   try {
     const rows = await fetchXlsxRows(SRC.announcements);
     const data = rows.map((r) => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
+      const o = {}; Object.keys(r).forEach(k => o[k].toString); // noop to avoid IDE noise
+      Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
       const date = excelToDate(o.date ?? o["announcement date"] ?? "");
       const english = String(o.announcement ?? o.english ?? o.message ?? "").trim();
       const hmong   = String(o["lus tshaj tawm"] ?? o.hmong ?? "").trim();
@@ -182,14 +170,13 @@ async function renderAnnouncements() {
   }
 }
 
-/***** SETLIST (split into upcoming vs last week) *****/
+/***** SETLIST (only Date, Song, Topic; split upcoming/last) *****/
 function normalizeSetlistRow(r) {
   const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
   const date = excelToDate(o.date ?? o.day ?? o["service date"] ?? "");
   const song = String(o.song ?? o.title ?? "").trim();
-  const col1 = String(o.column1 ?? o.category ?? "").trim();
   const topic = String(o.topic ?? o.notes ?? "").trim();
-  return { date, song, col1, topic, raw: r };
+  return { date, song, topic };
 }
 async function renderSetlist() {
   const upHead  = document.getElementById("setlist-up-head");
@@ -199,7 +186,7 @@ async function renderSetlist() {
   if (!upHead || !upBody || !lsHead || !lsBody) return;
 
   try {
-    const rows = (await fetchXlsxRows(SRC.setlist)).map(normalizeSetlistRow).filter(x => x.date);
+    const rows = (await fetchXlsxRows(SRC.setlist)).map(normalizeSetlistRow).filter(x => x.date && x.song);
 
     // Group by date (YYYY-MM-DD)
     const byDate = new Map();
@@ -210,19 +197,20 @@ async function renderSetlist() {
     }
     const dates = Array.from(byDate.keys()).map(d => new Date(d)).sort((a,b)=>a-b);
     const today = new Date();
-    const upcomingDate = dates.find(d => d >= new Date(today.getFullYear(), today.getMonth(), today.getDate()));
-    const lastDate = [...dates].filter(d => d < today).pop();
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const upcomingDate = dates.find(d => d >= todayDateOnly);
+    const lastDate = [...dates].filter(d => d < todayDateOnly).pop();
 
     function renderBlock(dateObj, headEl, bodyEl) {
-      headEl.innerHTML = `<tr><th>Date</th><th>Song</th><th>Column1</th><th>Topic</th></tr>`;
+      headEl.innerHTML = `<tr><th>Date</th><th>Song</th><th>Topic</th></tr>`;
       bodyEl.innerHTML = "";
-      if (!dateObj) { bodyEl.innerHTML = `<tr><td colspan="4">No data.</td></tr>`; return; }
+      if (!dateObj) { bodyEl.innerHTML = `<tr><td colspan="3">No data.</td></tr>`; return; }
       const key = dateObj.toISOString().slice(0,10);
       const list = byDate.get(key) || [];
-      if (!list.length) { bodyEl.innerHTML = `<tr><td colspan="4">No songs for this date.</td></tr>`; return; }
-      list.forEach(({date, song, col1, topic}) => {
+      if (!list.length) { bodyEl.innerHTML = `<tr><td colspan="3">No songs for this date.</td></tr>`; return; }
+      list.forEach(({date, song, topic}) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${song}</td><td>${col1}</td><td>${topic}</td>`;
+        tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${song}</td><td>${topic}</td>`;
         bodyEl.appendChild(tr);
       });
     }
@@ -238,26 +226,41 @@ async function renderSetlist() {
   }
 }
 
-/***** ANALYTICS ******/
+/***** ANALYTICS *****/
 function loadGoogle() {
   return new Promise((resolve) => { google.charts.load("current", { packages: ["corechart"] }); google.charts.setOnLoadCallback(resolve); });
 }
 
-// Top 10 (3D pie)
+// Top 10 (3D pie) — robust parsing
 async function renderTop10Pie() {
   const el = document.getElementById("chart-top10");
   if (!el) return;
   try {
+    await loadGoogle();
     const rows = await fetchCsv(SRC.kpiTop10);
+
+    // Try to detect label & value columns
     const headers = rows.length ? Object.keys(rows[0]) : [];
-    const nameKey = headers.find(h => /song|title/i.test(h)) || "Song";
-    const valKey  = headers.find(h => /play|count|times|value/i.test(h)) || "Plays";
+    let nameKey = headers.find(h => /song|title/i.test(h));
+    let valKey  = headers.find(h => /play|count|times|value|freq|uses/i.test(h));
+
+    // Fallback: first two columns
+    if (!nameKey || !valKey) {
+      nameKey = headers[0];
+      valKey  = headers[1];
+    }
+
     const dataArr = [["Song", "Plays"]];
     rows.forEach(r => {
-      const name = String(r[nameKey] ?? "").trim();
-      const val = Number((r[valKey] ?? "0").toString().replace(/,/g,""));
+      const name = String(r?.[nameKey] ?? "").trim();
+      let valRaw = (r?.[valKey] ?? "0").toString().trim();
+      valRaw = valRaw.replace(/,/g,""); // remove thousands separators
+      const val = Number(valRaw);
       if (name && isFinite(val)) dataArr.push([name, val]);
     });
+
+    if (dataArr.length <= 1) { el.innerHTML = "Unable to render Top 10."; return; }
+
     const data = google.visualization.arrayToDataTable(dataArr);
     const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
     const chart = new google.visualization.PieChart(el);
@@ -268,7 +271,7 @@ async function renderTop10Pie() {
   }
 }
 
-// Played vs Not Played ratio
+// Played vs Not Played — ONLY from songs_catalog.csv
 async function renderPlayedRatio() {
   const kpiVal = document.getElementById("kpi-played-ratio");
   const kpiSub = document.getElementById("kpi-played-sub");
@@ -276,28 +279,31 @@ async function renderPlayedRatio() {
   if (!kpiVal || !kpiSub || !el) return;
 
   try {
-    const [catalogRows, setlistRows] = await Promise.all([fetchCsv(SRC.catalog), fetchXlsxRows(SRC.setlist)]);
-    const totalSongs = new Set();
-    const headers = catalogRows.length ? Object.keys(catalogRows[0]) : [];
-    const titleKey = headers.find(h => /song|title/i.test(h)) || "song";
-    catalogRows.forEach(r => { const t = String(r[titleKey] ?? "").trim().toLowerCase(); if (t) totalSongs.add(t); });
+    await loadGoogle();
+    const catalogRows = await fetchCsv(SRC.catalog);
 
-    const played = new Set();
-    setlistRows.forEach(r => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-      const t = String(o.song ?? o.title ?? "").trim().toLowerCase();
-      if (t) played.add(t);
+    // Detect title/name column (the one that is blank if not yet played)
+    const headers = catalogRows.length ? Object.keys(catalogRows[0]) : [];
+    const titleKey =
+      headers.find(h => /song|title|name/i.test(h)) ||
+      headers.find(h => h.toLowerCase() !== "number") || // if only "number" and a blank column
+      headers[0];
+
+    let playedCount = 0;
+    let totalCount = 0;
+    catalogRows.forEach(r => {
+      const title = String(r?.[titleKey] ?? "").trim();
+      // Count every row as a song in catalog
+      totalCount += 1;
+      if (title) playedCount += 1; // name present => played
     });
 
-    const playedCount = played.size;
-    const catalogCount = totalSongs.size || playedCount; // fallback
-    const notPlayed = Math.max(catalogCount - playedCount, 0);
-    const pct = catalogCount ? Math.round((playedCount / catalogCount) * 100) : 0;
+    const notPlayed = Math.max(totalCount - playedCount, 0);
+    const pct = totalCount ? Math.round((playedCount / totalCount) * 100) : 0;
 
     kpiVal.textContent = `${pct}%`;
-    kpiSub.textContent = `Played ${playedCount} of ${catalogCount}`;
+    kpiSub.textContent = `Played ${playedCount} of ${totalCount}`;
 
-    await loadGoogle();
     const data = google.visualization.arrayToDataTable([
       ["Type","Count"],
       ["Played", playedCount],
