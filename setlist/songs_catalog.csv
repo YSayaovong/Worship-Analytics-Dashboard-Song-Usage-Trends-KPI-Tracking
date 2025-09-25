@@ -1,453 +1,112 @@
-song_id,title,number,source
-H001,,1,Hymnal
-H002,,2,Hymnal
-H003,,3,Hymnal
-H004,,4,Hymnal
-H005,,5,Hymnal
-H006,,6,Hymnal
-H007,,7,Hymnal
-H008,,8,Hymnal
-H009,,9,Hymnal
-H010,,10,Hymnal
-H011,,11,Hymnal
-H012,,12,Hymnal
-H013,,13,Hymnal
-H014,,14,Hymnal
-H015,,15,Hymnal
-H016,,16,Hymnal
-H017,,17,Hymnal
-H018,,18,Hymnal
-H019,,19,Hymnal
-H020,,20,Hymnal
-H021,,21,Hymnal
-H022,,22,Hymnal
-H023,,23,Hymnal
-H024,,24,Hymnal
-H025,,25,Hymnal
-H026,,26,Hymnal
-H027,,27,Hymnal
-H028,,28,Hymnal
-H029,,29,Hymnal
-H030,,30,Hymnal
-H031,,31,Hymnal
-H032,,32,Hymnal
-H033,,33,Hymnal
-H034,,34,Hymnal
-H035,,35,Hymnal
-H036,,36,Hymnal
-H037,,37,Hymnal
-H038,,38,Hymnal
-H039,,39,Hymnal
-H040,,40,Hymnal
-H041,,41,Hymnal
-H042,,42,Hymnal
-H043,,43,Hymnal
-H044,,44,Hymnal
-H045,,45,Hymnal
-H046,,46,Hymnal
-H047,,47,Hymnal
-H048,,48,Hymnal
-H049,,49,Hymnal
-H050,,50,Hymnal
-H051,,51,Hymnal
-H052,,52,Hymnal
-H053,,53,Hymnal
-H054,,54,Hymnal
-H055,,55,Hymnal
-H056,,56,Hymnal
-H057,,57,Hymnal
-H058,,58,Hymnal
-H059,,59,Hymnal
-H060,,60,Hymnal
-H061,,61,Hymnal
-H062,,62,Hymnal
-H063,,63,Hymnal
-H064,,64,Hymnal
-H065,,65,Hymnal
-H066,,66,Hymnal
-H067,,67,Hymnal
-H068,,68,Hymnal
-H069,,69,Hymnal
-H070,,70,Hymnal
-H071,,71,Hymnal
-H072,,72,Hymnal
-H073,,73,Hymnal
-H074,,74,Hymnal
-H075,,75,Hymnal
-H076,,76,Hymnal
-H077,,77,Hymnal
-H078,,78,Hymnal
-H079,,79,Hymnal
-H080,,80,Hymnal
-H081,,81,Hymnal
-H082,,82,Hymnal
-H083,,83,Hymnal
-H084,,84,Hymnal
-H085,,85,Hymnal
-H086,,86,Hymnal
-H087,,87,Hymnal
-H088,,88,Hymnal
-H089,,89,Hymnal
-H090,,90,Hymnal
-H091,,91,Hymnal
-H092,,92,Hymnal
-H093,,93,Hymnal
-H094,,94,Hymnal
-H095,,95,Hymnal
-H096,,96,Hymnal
-H097,,97,Hymnal
-H098,,98,Hymnal
-H099,,99,Hymnal
-H100,,100,Hymnal
-H101,,101,Hymnal
-H102,,102,Hymnal
-H103,,103,Hymnal
-H104,,104,Hymnal
-H105,,105,Hymnal
-H106,,106,Hymnal
-H107,,107,Hymnal
-H108,,108,Hymnal
-H109,,109,Hymnal
-H110,,110,Hymnal
-H111,,111,Hymnal
-H112,,112,Hymnal
-H113,,113,Hymnal
-H114,,114,Hymnal
-H115,,115,Hymnal
-H116,,116,Hymnal
-H117,,117,Hymnal
-H118,,118,Hymnal
-H119,,119,Hymnal
-H120,,120,Hymnal
-H121,,121,Hymnal
-H122,,122,Hymnal
-H123,,123,Hymnal
-H124,,124,Hymnal
-H125,,125,Hymnal
-H126,,126,Hymnal
-H127,,127,Hymnal
-H128,,128,Hymnal
-H129,,129,Hymnal
-H130,,130,Hymnal
-H131,,131,Hymnal
-H132,,132,Hymnal
-H133,,133,Hymnal
-H134,,134,Hymnal
-H135,,135,Hymnal
-H136,,136,Hymnal
-H137,,137,Hymnal
-H138,,138,Hymnal
-H139,,139,Hymnal
-H140,,140,Hymnal
-H141,,141,Hymnal
-H142,,142,Hymnal
-H143,,143,Hymnal
-H144,,144,Hymnal
-H145,,145,Hymnal
-H146,,146,Hymnal
-H147,,147,Hymnal
-H148,,148,Hymnal
-H149,,149,Hymnal
-H150,,150,Hymnal
-H151,,151,Hymnal
-H152,,152,Hymnal
-H153,,153,Hymnal
-H154,,154,Hymnal
-H155,,155,Hymnal
-H156,,156,Hymnal
-H157,,157,Hymnal
-H158,,158,Hymnal
-H159,,159,Hymnal
-H160,,160,Hymnal
-H161,,161,Hymnal
-H162,,162,Hymnal
-H163,,163,Hymnal
-H164,,164,Hymnal
-H165,,165,Hymnal
-H166,,166,Hymnal
-H167,,167,Hymnal
-H168,,168,Hymnal
-H169,,169,Hymnal
-H170,,170,Hymnal
-H171,,171,Hymnal
-H172,,172,Hymnal
-H173,,173,Hymnal
-H174,,174,Hymnal
-H175,,175,Hymnal
-H176,,176,Hymnal
-H177,,177,Hymnal
-H178,,178,Hymnal
-H179,,179,Hymnal
-H180,,180,Hymnal
-H181,,181,Hymnal
-H182,,182,Hymnal
-H183,,183,Hymnal
-H184,,184,Hymnal
-H185,,185,Hymnal
-H186,,186,Hymnal
-H187,,187,Hymnal
-H188,,188,Hymnal
-H189,,189,Hymnal
-H190,,190,Hymnal
-H191,,191,Hymnal
-H192,,192,Hymnal
-H193,,193,Hymnal
-H194,,194,Hymnal
-H195,,195,Hymnal
-H196,,196,Hymnal
-H197,,197,Hymnal
-H198,,198,Hymnal
-H199,,199,Hymnal
-H200,,200,Hymnal
-H201,,201,Hymnal
-H202,,202,Hymnal
-H203,,203,Hymnal
-H204,,204,Hymnal
-H205,,205,Hymnal
-H206,,206,Hymnal
-H207,,207,Hymnal
-H208,,208,Hymnal
-H209,,209,Hymnal
-H210,,210,Hymnal
-H211,,211,Hymnal
-H212,,212,Hymnal
-H213,,213,Hymnal
-H214,,214,Hymnal
-H215,,215,Hymnal
-H216,,216,Hymnal
-H217,,217,Hymnal
-H218,,218,Hymnal
-H219,,219,Hymnal
-H220,,220,Hymnal
-H221,,221,Hymnal
-H222,,222,Hymnal
-H223,,223,Hymnal
-H224,,224,Hymnal
-H225,,225,Hymnal
-H226,,226,Hymnal
-H227,,227,Hymnal
-H228,,228,Hymnal
-H229,,229,Hymnal
-H230,,230,Hymnal
-H231,,231,Hymnal
-H232,,232,Hymnal
-H233,,233,Hymnal
-H234,,234,Hymnal
-H235,,235,Hymnal
-H236,,236,Hymnal
-H237,,237,Hymnal
-H238,,238,Hymnal
-H239,,239,Hymnal
-H240,,240,Hymnal
-H241,,241,Hymnal
-H242,,242,Hymnal
-H243,,243,Hymnal
-H244,,244,Hymnal
-H245,,245,Hymnal
-H246,,246,Hymnal
-H247,,247,Hymnal
-H248,,248,Hymnal
-H249,,249,Hymnal
-H250,,250,Hymnal
-H251,,251,Hymnal
-H252,,252,Hymnal
-H253,,253,Hymnal
-H254,,254,Hymnal
-H255,,255,Hymnal
-H256,,256,Hymnal
-H257,,257,Hymnal
-H258,,258,Hymnal
-H259,,259,Hymnal
-H260,,260,Hymnal
-H261,,261,Hymnal
-H262,,262,Hymnal
-H263,,263,Hymnal
-H264,,264,Hymnal
-H265,,265,Hymnal
-H266,,266,Hymnal
-H267,,267,Hymnal
-H268,,268,Hymnal
-H269,,269,Hymnal
-H270,,270,Hymnal
-H271,,271,Hymnal
-H272,,272,Hymnal
-H273,,273,Hymnal
-H274,,274,Hymnal
-H275,,275,Hymnal
-H276,,276,Hymnal
-H277,,277,Hymnal
-H278,,278,Hymnal
-H279,,279,Hymnal
-H280,,280,Hymnal
-H281,,281,Hymnal
-H282,,282,Hymnal
-H283,,283,Hymnal
-H284,,284,Hymnal
-H285,,285,Hymnal
-H286,,286,Hymnal
-H287,,287,Hymnal
-H288,,288,Hymnal
-H289,,289,Hymnal
-H290,,290,Hymnal
-H291,,291,Hymnal
-H292,,292,Hymnal
-H293,,293,Hymnal
-H294,,294,Hymnal
-H295,,295,Hymnal
-H296,,296,Hymnal
-H297,,297,Hymnal
-H298,,298,Hymnal
-H299,,299,Hymnal
-H300,,300,Hymnal
-H301,,301,Hymnal
-H302,,302,Hymnal
-H303,,303,Hymnal
-H304,,304,Hymnal
-H305,,305,Hymnal
-H306,,306,Hymnal
-H307,,307,Hymnal
-H308,,308,Hymnal
-H309,,309,Hymnal
-H310,,310,Hymnal
-H311,,311,Hymnal
-H312,,312,Hymnal
-H313,,313,Hymnal
-H314,,314,Hymnal
-H315,,315,Hymnal
-H316,,316,Hymnal
-H317,,317,Hymnal
-H318,,318,Hymnal
-H319,,319,Hymnal
-H320,,320,Hymnal
-H321,,321,Hymnal
-H322,,322,Hymnal
-H323,,323,Hymnal
-H324,,324,Hymnal
-H325,,325,Hymnal
-H326,,326,Hymnal
-H327,,327,Hymnal
-H328,,328,Hymnal
-H329,,329,Hymnal
-H330,,330,Hymnal
-H331,,331,Hymnal
-H332,,332,Hymnal
-H333,,333,Hymnal
-H334,,334,Hymnal
-H335,,335,Hymnal
-H336,,336,Hymnal
-H337,,337,Hymnal
-H338,,338,Hymnal
-H339,,339,Hymnal
-H340,,340,Hymnal
-H341,,341,Hymnal
-H342,,342,Hymnal
-H343,,343,Hymnal
-H344,,344,Hymnal
-H345,,345,Hymnal
-H346,,346,Hymnal
-H347,,347,Hymnal
-H348,,348,Hymnal
-H349,,349,Hymnal
-H350,,350,Hymnal
-H351,,351,Hymnal
-H352,,352,Hymnal
-XT001,,,XhThai
-XT002,,,XhThai
-XT003,,,XhThai
-XT004,,,XhThai
-XT005,,,XhThai
-XT006,,,XhThai
-XT007,,,XhThai
-XT008,,,XhThai
-XT009,,,XhThai
-XT010,,,XhThai
-XT011,,,XhThai
-XT012,,,XhThai
-XT013,,,XhThai
-XT014,,,XhThai
-XT015,,,XhThai
-XT016,,,XhThai
-XT017,,,XhThai
-XT018,,,XhThai
-XT019,,,XhThai
-XT020,,,XhThai
-XT021,,,XhThai
-XT022,,,XhThai
-XT023,,,XhThai
-XT024,,,XhThai
-XT025,,,XhThai
-XT026,,,XhThai
-XT027,,,XhThai
-XT028,,,XhThai
-XT029,,,XhThai
-XT030,,,XhThai
-XT031,,,XhThai
-XT032,,,XhThai
-XT033,,,XhThai
-XT034,,,XhThai
-XT035,,,XhThai
-XT036,,,XhThai
-XT037,,,XhThai
-XT038,,,XhThai
-XT039,,,XhThai
-XT040,,,XhThai
-XT041,,,XhThai
-XT042,,,XhThai
-XT043,,,XhThai
-XT044,,,XhThai
-XT045,,,XhThai
-XT046,,,XhThai
-XT047,,,XhThai
-XT048,,,XhThai
-XT049,,,XhThai
-XT050,,,XhThai
-C001,,,Contemporary
-C002,,,Contemporary
-C003,,,Contemporary
-C004,,,Contemporary
-C005,,,Contemporary
-C006,,,Contemporary
-C007,,,Contemporary
-C008,,,Contemporary
-C009,,,Contemporary
-C010,,,Contemporary
-C011,,,Contemporary
-C012,,,Contemporary
-C013,,,Contemporary
-C014,,,Contemporary
-C015,,,Contemporary
-C016,,,Contemporary
-C017,,,Contemporary
-C018,,,Contemporary
-C019,,,Contemporary
-C020,,,Contemporary
-C021,,,Contemporary
-C022,,,Contemporary
-C023,,,Contemporary
-C024,,,Contemporary
-C025,,,Contemporary
-C026,,,Contemporary
-C027,,,Contemporary
-C028,,,Contemporary
-C029,,,Contemporary
-C030,,,Contemporary
-C031,,,Contemporary
-C032,,,Contemporary
-C033,,,Contemporary
-C034,,,Contemporary
-C035,,,Contemporary
-C036,,,Contemporary
-C037,,,Contemporary
-C038,,,Contemporary
-C039,,,Contemporary
-C040,,,Contemporary
-C041,,,Contemporary
-C042,,,Contemporary
-C043,,,Contemporary
-C044,,,Contemporary
-C045,,,Contemporary
-C046,,,Contemporary
-C047,,,Contemporary
-C048,,,Contemporary
-C049,,,Contemporary
-C050,,,Contemporary
+song_id,title,number,category,topic,first_seen_date,source
+S001,"10,000 Reasons",,Contemporary,40th Year Anniversary,10/4/2025,Setlist
+S002,You Raise Me Up,,Contemporary,40th Year Anniversary,10/4/2025,Setlist
+S003,Be Thou My Vision,,English Hymn,40th Year Anniversary,10/4/2025,Setlist
+S004,Be Thou My Vision,,English Hymn,Txl Txawjsong Led Sermon,7/27/2025,Setlist
+S005,Abide,,English Hymn,Youth Lead (English Service),9/21/2025,Setlist
+S006,All Creatures of Our God and King,,English Hymn,Youth Lead (English Service),6/22/2025,Setlist
+S007,Amazing Grace,,English Hymn,Youth Lead (English Service),6/22/2025,Setlist
+S008,Anywhere,,English Hymn,Youth Lead (English Service),9/21/2025,Setlist
+S009,At Your Name,,English Hymn,Youth Lead (English Service),9/21/2025,Setlist
+S010,Blessed Assurance,,English Hymn,Youth Lead (English Service),6/22/2025,Setlist
+S011,Follow You,,English Hymn,Youth Lead (English Service),9/21/2025,Setlist
+S012,"Koj Tsis Pab, Kuv Ua Tsis Tau Dabtsi [Without Him] (#148)",,HBNA Songbook,40th Year Anniversary,10/4/2025,Setlist
+S013,"Vajtswv, Vajtswv, Vajtswv",6,HBNA Songbook,A woman worthy of praise,5/18/2025,Setlist
+S014,Kuv Muab Kuv Lub Cev Rau Yexus,29,HBNA Songbook,A woman worthy of praise,5/18/2025,Setlist
+S015,Vajtswv Tus Ntsujplig Thov Koj,74,HBNA Songbook,A woman worthy of praise,5/18/2025,Setlist
+S016,"Vajtswv, Kuv Txav Los Cuag Koj",30,HBNA Songbook,All the Same,3/2/2025,Setlist
+S017,Thaum Peb Los Ntseeg Tswv Yexus,60,HBNA Songbook,All the Same,3/2/2025,Setlist
+S018,Tus Uas Sawm Zoo,77,HBNA Songbook,All the Same,3/2/2025,Setlist
+S019,"Vajtswv, Vajtswv, Vajtswv",6,HBNA Songbook,Death was the price,2/2/2025,Setlist
+S020,Kuv Muab Kuv Lub Cev Rau Yexus,29,HBNA Songbook,Death was the price,2/2/2025,Setlist
+S021,Leejtwg Txhiv Tau Peb Lub Txim,82,HBNA Songbook,Death was the price,2/2/2025,Setlist
+S022,Vajtswv Tsa Yexus Sawv Los,224,HBNA Songbook,Easter Sunday,4/20/2025,Setlist
+S023,"Haleluyas, Tswv Yexus Muaj Hwjchim",241,HBNA Songbook,Easter Sunday,4/20/2025,Setlist
+S024,Koj Yog Vajtswv,4,HBNA Songbook,Faithfulness,9/28/2025,Setlist
+S025,Kuv Twb Xais Tag Lawm,95,HBNA Songbook,Faithfulness,9/28/2025,Setlist
+S026,Vajtswv Yog Peb Leejtxiv,10,HBNA Songbook,Fathers Day,6/15/2025,Setlist
+S027,"Vajtswv, Peb Yog Koj Cov Menyuam",11,HBNA Songbook,Fathers Day,6/15/2025,Setlist
+S028,Nws Nyob Chaw Siab,208,HBNA Songbook,Fathers Day,6/15/2025,Setlist
+S029,Koj Yog Vajtswv,4,HBNA Songbook,Gave Xh a rest - Just came back from Thailand (Unkown Topic),8/17/2025,Setlist
+S030,"Vajtswv, Thov Koj Tshuaj Xyuas",32,HBNA Songbook,Gave Xh a rest - Just came back from Thailand (Unkown Topic),8/17/2025,Setlist
+S031,Cov Kwvtij Hmoob,91,HBNA Songbook,Gave Xh a rest - Just came back from Thailand (Unkown Topic),8/17/2025,Setlist
+S032,Yexus Coj Kuv Mus Kev Tshav Ntuj,152,HBNA Songbook,God as our Creator,1/5/2025,Setlist
+S033,Cov Ntseeg Yexus Yog Ib Tsevneeg,154,HBNA Songbook,God as our Creator,1/5/2025,Setlist
+S034,Hnub No Peb Sawvdaws Tuaj Ua Kev Zoo Siab,270,HBNA Songbook,God as our Creator,1/5/2025,Setlist
+S035,Koj Yog Vajtswv,4,HBNA Songbook,God is Good (He is the good Shepherd),1/12/2025,Setlist
+S036,Tswv Yexus Lub Npe,145,HBNA Songbook,God is Good (He is the good Shepherd),1/12/2025,Setlist
+S037,Nimno Kuv Los Ntseeg Yexus,151,HBNA Songbook,God is Good (He is the good Shepherd),1/12/2025,Setlist
+S038,Thaum Vajtswv Tseem Tsis Tau Tsis,2,HBNA Songbook,God is Love,1/19/2025,Setlist
+S039,Koj Yog Vajtswv,4,HBNA Songbook,God is Love,1/19/2025,Setlist
+S040,"Tswv Yexus, Koj Yog Tus Hlub Kuv",37,HBNA Songbook,God is Love,1/19/2025,Setlist
+S041,"Zoo Siab Kawg, Kuv Tus Tswv Yexus",112,HBNA Songbook,God is our salvation,1/26/2025,Setlist
+S042,Yexus Yog Lub Chaw Ruaj Khov Kho,115,HBNA Songbook,God is our salvation,1/26/2025,Setlist
+S043,Peb Cov Ntseeg Txhua Leej Txhua Tus,120,HBNA Songbook,God is our salvation,1/26/2025,Setlist
+S044,Koj Yog Vajtswv,4,HBNA Songbook,God is the owner of everything,8/31/2025,Setlist
+S045,Kuv Muab Kuv Lub Cev Rau Yexus,29,HBNA Songbook,God is the owner of everything,8/31/2025,Setlist
+S046,Koj Yog Vajtswv,4,HBNA Songbook,Guest Speaker Week (Unknown Topic),3/30/2025,Setlist
+S047,"Vajtswv, Peb Yog Koj Cov Menyuam",11,HBNA Songbook,Guest Speaker Week (Unknown Topic),3/30/2025,Setlist
+S048,Kuv Nyiam Hais Txog Vajtswv Txojlus,131,HBNA Songbook,Holiness and Sin,2/9/2025,Setlist
+S049,Kuv Lub Txim Yexus Them Tag,213,HBNA Songbook,Holiness and Sin,2/9/2025,Setlist
+S050,"Tswv Yexus, Koj Tuag Txhiv Kuv",240,HBNA Songbook,Holiness and Sin,2/9/2025,Setlist
+S051,"Vajtswv, Koj Yeej Hlub Peb Kawg",21,HBNA Songbook,Holiness is demand by the Lord in the church,3/23/2025,Setlist
+S052,Kuv Muab Siab Npuab Yexus,23,HBNA Songbook,Holiness is demand by the Lord in the church,3/23/2025,Setlist
+S053,Vajtswv Hu Peb Los Ua Nws Haivneeg,90,HBNA Songbook,Holiness is demand by the Lord in the church,3/23/2025,Setlist
+S054,Vajtswv Phau Ntawv,78,HBNA Songbook,Life is incomprehensible in a sinful world,2/23/2025,Setlist
+S055,Thaum Sawvdaws Tseem Ua Neej Nyob,162,HBNA Songbook,Life is incomprehensible in a sinful world,2/23/2025,Setlist
+S056,Haleluyas Qhuas Tswv Yexus,348,HBNA Songbook,Life is incomprehensible in a sinful world,2/23/2025,Setlist
+S057,nan,,HBNA Songbook,Make Disciples/baptize & Teaching,8/24/2025,Setlist
+S058,"Vajtswv, Vajtswv, Vajtswv",6,HBNA Songbook,Repentance is God’s desires,4/6/2025,Setlist
+S059,Tswv Yexus Thov Koj Mloog Kuv Thov,31,HBNA Songbook,Repentance is God’s desires,4/6/2025,Setlist
+S060,Tus Tswv Yexus Hlub Peb Sawvdaws,97,HBNA Songbook,Repentance is God’s desires,4/6/2025,Setlist
+S061,Cov Kwvtij Hmoob,134,HBNA Songbook,Repentance is God’s desires,4/6/2025,Setlist
+S062,Koj Yog Vajtswv,4,HBNA Songbook,Seng Led Worship (Unknown Topic),3/16/2025,Setlist
+S063,"Vajtswv, Thov Koj Tshuaj Xyuas",32,HBNA Songbook,Seng Led Worship (Unknown Topic),3/16/2025,Setlist
+S064,Tus Tswv Yexus Yeej Yog Txojkev,55,HBNA Songbook,Seng Led Worship (Unknown Topic),7/6/2025,Setlist
+S065,Cov Uas Ntseeg Tswv Yexus Muaj Chaw Nyob,99,HBNA Songbook,Seng Led Worship (Unknown Topic),3/16/2025,Setlist
+S066,Peb Yog Tswv Yexus Ib Pab Tubrog,104,HBNA Songbook,Seng Led Worship (Unknown Topic),7/6/2025,Setlist
+S067,Kuv Taug Txojkev Mus Saum Ceebtsheej,171,HBNA Songbook,The Church,6/1/2025,Setlist
+S068,Koj Yog Vajtswv,4,HBNA Songbook,The beauty of the bride: LOVE,2/16/2025,Setlist
+S069,Cov Kwvtij Hmoob,91,HBNA Songbook,The beauty of the bride: LOVE,2/16/2025,Setlist
+S070,Vajtswv Ua Koj Tsaug,283,HBNA Songbook,The beauty of the bride: LOVE,2/16/2025,Setlist
+S071,Koj Yog Vajtswv,4,HBNA Songbook,The church: “Bride of Christ”,5/25/2025,Setlist
+S072,Nyob Ceebtsheej Zoo Dua,179,HBNA Songbook,The church: “Bride of Christ”,5/25/2025,Setlist
+S073,Npaj Roj Rau Hauv Teeb,180,HBNA Songbook,The church: “Bride of Christ”,5/25/2025,Setlist
+S074,Thaum Txog Hnub Vajtswv Los,183,HBNA Songbook,The church: “Bride of Christ”,5/25/2025,Setlist
+S075,Kuv Tus Kwvluag,57,HBNA Songbook,The earthly assemble embassy the heavenly kingdom,6/29/2025,Setlist
+S076,Cov Ntseeg Yexus Yog Ib Tsevneeg,154,HBNA Songbook,The earthly assemble embassy the heavenly kingdom,6/29/2025,Setlist
+S077,Kuv Taug Txojkev Mus Saum Ceebtsheej,171,HBNA Songbook,The earthly assemble embassy the heavenly kingdom,6/29/2025,Setlist
+S078,Peb Cov Ntseeg Tswv Yexus,62,HBNA Songbook,The power of unity,4/13/2025,Setlist
+S079,Kuv Yuav Tsa Cov Ntseeg Vajtswv,89,HBNA Songbook,The power of unity,4/13/2025,Setlist
+S080,Tus Tswv Yexus Zoo Yam Li Lub Kaus,219,HBNA Songbook,The power of unity,4/13/2025,Setlist
+S081,Vajtswv Thiab Peb Tus Tswv Yexus,3,HBNA Songbook,The tongue is a fire,3/9/2025,Setlist
+S082,"Tswv Yexus, Kuv Hnov Koj Hu Kuv",28,HBNA Songbook,The tongue is a fire,3/9/2025,Setlist
+S083,Thaum Vajtswv Tsim Neeg,161,HBNA Songbook,The tongue is a fire,3/9/2025,Setlist
+S084,Kuv Tus Kwvluag,57,HBNA Songbook,Tlu Church,6/1/2025,Setlist
+S085,Cov Ntseeg Yexus Yog Ib Tsevneeg,154,HBNA Songbook,Tne Church,6/1/2025,Setlist
+S086,Kuv Tus Kwvluag,57,HBNA Songbook,Txl Nplooj Led Sermon,7/20/2025,Setlist
+S087,Vajtswv Phau Ntawv,78,HBNA Songbook,Txl Nplooj Led Sermon,7/20/2025,Setlist
+S088,Peb Sawvdaws Yuav Tsum Nyeem Vajtswv Lus,79,HBNA Songbook,Txl Nplooj Led Sermon,7/20/2025,Setlist
+S089,"Vajtswv, Koj Muaj Hwjchim",8,HBNA Songbook,Txl Tsavhaumxeeb Led Sermon,7/13/2025,Setlist
+S090,Txhua Haivneeg Nyob Hauv Lub Qab Ntuj,13,HBNA Songbook,Txl Tsavhaumxeeb Led Sermon,7/13/2025,Setlist
+S091,Kuv Twb Raug Kev Txomnyem Ntsuav,27,HBNA Songbook,Txl Tsavhaumxeeb Led Sermon,7/13/2025,Setlist
+S092,Koj Yog Vajtswv,4,HBNA Songbook,Txl Txawjsong Led Sermon,7/27/2025,Setlist
+S093,"Tswv Yexus, Kuv Hnov Koj Hu Kuv",28,HBNA Songbook,Txl Txawjsong Led Sermon,7/27/2025,Setlist
+S094,"Zoo Siab Kawg, Kuv Tus Tswv Yexus",112,HBNA Songbook,Txl Txawjsong Led Sermon,7/27/2025,Setlist
+S095,Koj Yog Vajtswv,4,HBNA Songbook,Xh Chongpao Thao Led Sermon,5/11/2025,Setlist
+S096,Thaum Tswv Yexus Txhiv Peb Lub Txim,56,HBNA Songbook,Xh Chongpao Thao Led Sermon,5/11/2025,Setlist
+S097,Koj Yog Vajtswv,4,HBNA Songbook,Xh Neejmais Led Sermon,4/27/2025,Setlist
+S098,"Tswv Yexus, Kuv Hnov Koj Hu Kuv",28,HBNA Songbook,Xh Neejmais Led Sermon,4/27/2025,Setlist
+S099,Txij Hnub Kuv Lees Yuav Tswv Yexus,59,HBNA Songbook,Xh Neejmais Led Sermon,4/27/2025,Setlist
+S100,Peb Cov Ntseeg Tswv Yexus,62,HBNA Songbook,Xh Neejmais Led Sermon,8/3/2025,Setlist
+S101,Cov Kwvtij Hmoob,134,HBNA Songbook,Xh Neejmais Led Sermon,8/3/2025,Setlist
+S102,Vajtswv Thov Koj Foom Koobhmoov,1,HBNA Songbook,Youth Lead (Vamyeejkoob & Sheng not available),9/14/2025,Setlist
+S103,Kuv Yuav Tsa Cov Ntseeg Vajtswv,89,HBNA Songbook,the temple/house of God,6/8/2025,Setlist
+S104,Vajtswv Hu Peb Los Ua Nws Haivneeg,90,HBNA Songbook,the temple/house of God,6/8/2025,Setlist
+S105,Cov Kwvtij Hmoob,91,HBNA Songbook,the temple/house of God,6/8/2025,Setlist
+S106,Vajtswv Thov Koj Foom Koobhmoov,1,HBNA Songbook,,9/7/2025,Setlist
+S107,"Vajtswv, Koj Muaj Hwjchim",8,HBNA Songbook,,9/7/2025,Setlist
+S108,Ntiajteb Vajtswv Tsim Tseg,160,HBNA Songbook,,9/7/2025,Setlist
+S109,Nws Lub Npe,,Hmong Hymn,Youth Lead (Vamyeejkoob & Sheng not available),9/14/2025,Setlist
+S110,Tus Ntseeg,,Hmong Hymn,Youth Lead (Vamyeejkoob & Sheng not available),9/14/2025,Setlist
+S111,Kuv Lub Siab Qhuas Tus Tswv Yexus,12,Xh Thai's Hymnal Book,Faithfulness,9/28/2025,Setlist
