@@ -3,85 +3,134 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HFBC – Worship & Announcements</title>
+  <title>HFBC – Worship Hub</title>
 
-  <!-- Keep filename exactly as shown -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- Styles (keep filename) -->
+  <link rel="stylesheet" href="style.css?v=2025-09-25c" />
 
-  <!-- Libraries & app script -->
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-  <script src="script.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
+  <!-- Google Charts -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <!-- App -->
+  <script src="script.js?v=2025-09-25c" defer></script>
 </head>
 <body>
   <main class="container">
-    <!-- Header / Hero (kept simple; style comes from CSS) -->
     <header class="page-header">
-      <h1>HFBC – Worship Info</h1>
-      <p class="muted">Live updates from Excel files on GitHub.</p>
+      <h1>HFBC – Worship Hub</h1>
+      <p class="muted">Live updates from GitHub spreadsheets and CSVs.</p>
     </header>
 
-    <!-- Worship Practice (your weekly list; JS strips labels only) -->
+    <!-- Weekly Practices (rolling next occurrences) -->
     <section class="card">
-      <h2>Worship Practice</h2>
-      <ul id="worship-practice-list" class="bullets">
-        <!-- Example entries; keep/edit as you wish. Only the leading words are removed. -->
-        <li>Thursday Practice: 6:00pm–8:00pm</li>
-        <li>Sunday Practice: 8:40am–9:30am</li>
-      </ul>
-      <p class="muted">Detailed dates/times are listed under “Special Practice.”</p>
+      <h2>Weekly Practices</h2>
+      <ul id="weekly-practice-list" class="bullets"></ul>
+      <p class="muted">Next upcoming Thursday and Sunday sessions are shown.</p>
     </section>
 
-    <!-- Special Practice (driven by Excel) -->
+    <!-- Additional Practice (non-Thu/Sun from Excel) -->
     <section class="card">
-      <h2>Special Practice</h2>
+      <h2>Additional Practice</h2>
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
               <th>Date</th>
               <th>Time</th>
-              <th>Notes</th>
             </tr>
           </thead>
-          <tbody id="special-practice-body">
-            <!-- Filled by script.js -->
-          </tbody>
+          <tbody id="additional-practice-body"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- Worship Team Members (your existing content stays here) -->
+    <!-- Announcements -->
+    <section class="card">
+      <h2>Announcements</h2>
+      <ul id="announcements-list" class="bullets"></ul>
+      <p class="muted">English and Hmong. Last 31 days, newest first.</p>
+    </section>
+
+    <!-- Bible Study -->
+    <section class="card">
+      <h2>Bible Study</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead id="bible-study-head"></thead>
+          <tbody id="bible-study-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Worship Team Members -->
     <section class="card">
       <h2>Worship Team Members</h2>
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr>
-              <th>Name</th><th>Role</th><th>Availability</th>
-            </tr>
+            <tr><th>Name</th><th>Role</th></tr>
           </thead>
-          <tbody>
-            <tr><td>Niam Vamyeejkoob</td><td>Worship Leader</td><td></td></tr>
-            <tr><td>Vamyeejkoob</td><td>Pianist</td><td></td></tr>
-            <tr><td>Seng</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Nhia</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Tsavhaumxeeb</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Npis</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Koobxwm</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Txhiajtswb</td><td>Singer</td><td></td></tr>
-            <tr><td>Niam Yauhan</td><td>Singer</td><td></td></tr>
-          </tbody>
+          <tbody id="members-body"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- Announcements (driven by Excel) -->
+    <!-- Setlist -->
     <section class="card">
-      <h2>Announcements</h2>
-      <ul id="announcements-list" class="bullets">
-        <!-- Filled by script.js -->
-      </ul>
-      <p class="muted">Shows English and Hmong. Only items from the last 31 days; newest first.</p>
+      <h2>Setlist</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead id="setlist-head"></thead>
+          <tbody id="setlist-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Songs Catalog -->
+    <section class="card">
+      <h2>Songs Catalog</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead id="catalog-head"></thead>
+          <tbody id="catalog-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Data Analytics -->
+    <section class="card">
+      <h2>Song Analytics</h2>
+
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-label">Hymnal Coverage</div>
+          <div class="kpi-value" id="kpi-coverage">—</div>
+          <div class="kpi-sub" id="kpi-coverage-sub">Loading…</div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-card">
+          <h3>Top 10 Songs (3D Pie)</h3>
+          <div id="chart-top10" class="chart-area"></div>
+        </div>
+
+        <div class="chart-card">
+          <h3>KPI by Source</h3>
+          <div id="chart-by-source" class="chart-area"></div>
+        </div>
+      </div>
+
+      <h3>Unused Hymnal</h3>
+      <div class="table-wrap">
+        <table class="table">
+          <thead id="unused-head"></thead>
+          <tbody id="unused-body"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 </body>
