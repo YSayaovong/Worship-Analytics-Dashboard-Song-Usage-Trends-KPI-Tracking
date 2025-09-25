@@ -1,6 +1,7 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   (Single pie only: Plays by Song)
+   - Top list: Top 10 (exclude "NA"/"N/A"/"N.A."/“none” and anything containing "Church Close")
+   - 3D pie chart on the right (Google Charts)
 ========================= */
 
 /* ---------- CONFIG ---------- */
@@ -106,19 +107,47 @@ function findFirst(headers, candidates){
   return -1;
 }
 
-/* ---------- Hard-remove right-side analytics (chart + list) ---------- */
-function nukeRightAnalytics(){
-  // Remove the right-hand list (assumes #bottom5 exists inside a <div>)
-  const rightListWrap = document.querySelector('#bottom5')?.closest('div');
-  if (rightListWrap) rightListWrap.remove();
+/* ---------- LAYOUT: place 3D pie in the right column ---------- */
+function placePieRight(){
+  // Put the pie where the right-hand list was
+  const rightCol = document.querySelector('#bottom5')?.closest('div');
+  if (rightCol){
+    rightCol.innerHTML = `
+      <h3 class="subhead">Plays by Song (3D Pie)</h3>
+      <div class="chart-card"><div id="pieChart3D" style="width:100%;height:320px;"></div></div>
+    `;
+  } else {
+    // Fallback: append to analytics grid
+    const grid = document.querySelector('.analytics-grid') || document.body;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<h3 class="subhead">Plays by Song (3D Pie)</h3>
+                      <div class="chart-card"><div id="pieChart3D" style="width:100%;height:320px;"></div></div>`;
+    grid.appendChild(wrap);
+  }
+  // Remove any old charts row to avoid duplicates
+  const chartsRow = document.querySelector('.charts-2');
+  if (chartsRow) chartsRow.remove();
+}
 
-  // Remove the right-hand chart card via its canvas id
-  const rightCardById = document.querySelector('#barChart')?.closest('.chart-card');
-  if (rightCardById) rightCardById.remove();
+/* ---------- Load Google Charts (once) ---------- */
+let gchartsLoaded = false, gchartsLoading = null;
+function loadGoogleCharts(){
+  if (gchartsLoaded) return Promise.resolve();
+  if (gchartsLoading) return gchartsLoading;
 
-  // Fallback: remove the last chart-card in the charts grid (second pie)
-  const chartsWrap = document.querySelector('.charts-2');
-  if (chartsWrap && chartsWrap.children.length > 1) chartsWrap.lastElementChild.remove();
+  gchartsLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = "https://www.gstatic.com/charts/loader.js";
+    s.onload = () => {
+      try{
+        google.charts.load('current', { packages:['corechart'] });
+        google.charts.setOnLoadCallback(() => { gchartsLoaded = true; resolve(); });
+      }catch(e){ reject(e); }
+    };
+    s.onerror = () => reject(new Error("Failed to load Google Charts"));
+    document.head.appendChild(s);
+  });
+  return gchartsLoading;
 }
 
 /* ---------- WORSHIP PRACTICE (table like Special Practice) ---------- */
@@ -349,32 +378,39 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
     // --- Analytics (Songs only) ---
-    let songCounts = [];
+    // Build song counts, excluding placeholders/closures
+    const counts = new Map();
     if(idxSong !== -1){
-      const counts = new Map();
       for(const r of rows){
-        const s = String(r[idxSong] ?? "").trim();
-        if(s) counts.set(s, (counts.get(s)||0)+1);
+        const sRaw = String(r[idxSong] ?? "").trim();
+        if (!sRaw) continue;
+        const sLower = sRaw.toLowerCase();
+        const isNA = sLower === "na" || sLower === "n/a" || sLower === "n.a." || sLower === "n.a" || sLower === "none";
+        const isClose = sLower.includes("church close");
+        if (isNA || isClose) continue; // exclude from analytics
+        counts.set(sRaw, (counts.get(sRaw)||0)+1);
       }
-      songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
     }
+    const songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
 
-    // Left list: Top 5 songs
-    const top5 = songCounts.slice(0,5);
-    $("#top5").innerHTML = top5.length
-      ? top5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
+    // Left list: Top 10 songs
+    const leftHeader = $("#top5")?.previousElementSibling;
+    if(leftHeader) leftHeader.textContent = "Top 10 – Most Played";
+
+    const top10 = songCounts.slice(0,10);
+    $("#top5").innerHTML = top10.length
+      ? top10.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
       : `<li class="dim">No data</li>`;
 
-    // Draw only the left pie
-    drawSongsPie(songCounts.slice(0,7));
+    // Layout: ensure 3D pie container exists on the right
+    placePieRight();
 
-    // Ensure right-hand analytics cannot appear
-    nukeRightAnalytics();
+    // Draw 3D pie (top 7 slices for readability)
+    await drawSongsPie3D(songCounts.slice(0,7));
   }catch(e){
     console.error(e);
     $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
     $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
-    nukeRightAnalytics();
   }
 }
 
@@ -443,59 +479,41 @@ async function wikipediaOpenSearch(q){
   return j?.[1]?.[0] || "";
 }
 
-/* ---------- Charts (left pie only) ---------- */
-let songsPieInst;
-function destroyChart(inst){ if(inst){ inst.destroy(); } }
+/* ---------- Charts (3D pie via Google Charts) ---------- */
+async function drawSongsPie3D(entries){
+  const container = document.getElementById("pieChart3D");
+  if (!container || !entries || entries.length === 0) return;
 
-// Left pie: Plays by Song
-function drawSongsPie(entries){
-  const ctx = $("#pieChart");
-  destroyChart(songsPieInst);
+  await loadGoogleCharts();
 
-  const labels = entries.map(e => safeLabel(e[0]));
-  const data = entries.map(e => e[1]);
-  const total = data.reduce((a,b)=>a+(+b||0), 0) || 1;
+  // Build data table
+  const dataArr = [["Song","Plays"]];
+  for(const [label, count] of entries){
+    dataArr.push([safeLabel(label), Number(count) || 0]);
+  }
+  const data = google.visualization.arrayToDataTable(dataArr);
 
-  songsPieInst = new Chart(ctx, {
-    type: "pie",
-    data: { labels, datasets:[{ data }] },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            generateLabels(chart){
-              const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-              const ds   = chart.data.datasets[0]?.data || [];
-              const lbs  = chart.data.labels || [];
-              const sum  = ds.reduce((a,b)=>a+(+b||0),0) || 1;
-              return base.map((item, i) => {
-                const val = +ds[i] || 0;
-                const pct = Math.round((val/sum)*1000)/10;
-                return { ...item, text: `${safeLabel(lbs[i])} — ${pct}%` };
-              });
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            label(ctx){
-              const val = +ctx.parsed || 0;
-              const pct = Math.round((val/total)*1000)/10;
-              return `${safeLabel(ctx.label)}: ${val} (${pct}%)`;
-            }
-          }
-        }
-      }
-    }
-  });
+  // Options: 3D pie, legend bottom, percent labels, transparent bg
+  const options = {
+    is3D: true,
+    backgroundColor: 'transparent',
+    pieSliceText: 'percentage',
+    legend: { position: 'bottom' },
+    chartArea: { left: 0, top: 10, width: '100%', height: '85%' },
+    tooltip: { text: 'both' }
+  };
+
+  const chart = new google.visualization.PieChart(container);
+  chart.draw(data, options);
+
+  // Redraw on resize
+  window.addEventListener('resize', () => chart.draw(data, options));
 }
 
 /* ---------- BOOT ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  // Ensure the 2nd pie + right-hand list are gone before anything renders
-  nukeRightAnalytics();
+  // Ensure the 3D pie lives in the right column
+  placePieRight();
 
   loadPractice();
   try{ await loadMembers(); }catch{}
