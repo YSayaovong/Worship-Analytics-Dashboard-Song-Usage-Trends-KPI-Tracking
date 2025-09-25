@@ -1,114 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>HFBC – Praise & Worship</title>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
-  <!-- Libraries -->
+  <title>HFBC – Worship & Announcements</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- SheetJS for XLSX parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <header class="site-header">
-    <div class="container">
-      <h1>HFBC Praise & Worship</h1>
-    </div>
-  </header>
-
   <main class="container">
-    <!-- Row 1: left column = Worship Practice + Special Practice (stacked); right column = Members -->
-    <section id="top-grid" class="grid-2">
-      <div class="left-stack">
-        <div class="card compact-card">
-          <h2 class="section-title">Worship Practice</h2>
-          <div id="reminders-table" class="table like-card compact-like-card">
-            <!-- Fallback content; replaced if reminders.xlsx exists -->
-            <ul class="reminders">
-              <li><strong>Thursday Practice</strong>: 6:00pm–8:00pm</li>
-              <li><strong>Sunday Practice</strong>: 8:40am–9:30am</li>
-            </ul>
-          </div>
-        </div>
+    <!-- Worship Practice (labels removed as requested) -->
+    <section class="card">
+      <h2>Worship Practice</h2>
+      <p class="muted">Practice times are listed under “Special Practice.”</p>
+    </section>
 
-        <div class="card mt16">
-          <h2 class="section-title">Special Practice</h2>
-          <div id="special-practice-table" class="table like-card">Loading…</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2 class="section-title">Worship Team Members</h2>
-        <div id="members-table" class="table like-card">Loading members…</div>
+    <!-- Special Practice -->
+    <section class="card">
+      <h2>Special Practice</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="special-practice-body">
+            <!-- filled by script.js -->
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <!-- Row 2: Announcements -->
-    <section id="announcements-section" class="section">
-      <div class="card">
-        <h2 class="section-title">Announcements</h2>
-        <div id="announcements-table" class="table like-card">Loading announcements…</div>
-      </div>
+    <!-- Worship Team Members (keep your current table/content here if needed) -->
+    <section class="card">
+      <h2>Worship Team Members</h2>
+      <div id="team-members"><!-- your existing table goes here --></div>
     </section>
 
-    <!-- Row 3: Weekly Bible Verses (Last 4 Weeks) -->
-    <section id="bible-section" class="section">
-      <div class="card">
-        <h2 class="section-title">Weekly Bible Verses (Last 4 Weeks)</h2>
-        <div id="bible-verse-table" class="table like-card">Loading verses…</div>
-      </div>
-    </section>
-
-    <!-- Row 4: Setlists (Coming Up / Previous) -->
-    <section id="setlist-section" class="section">
-      <div class="card">
-        <h2 class="section-title">Coming Up Set</h2>
-        <div id="setlist-next-meta" class="dim"></div>
-        <div id="setlist-next" class="table like-card">Loading…</div>
-      </div>
-
-      <div class="card mt16">
-        <h2 class="section-title">Previous Set</h2>
-        <div id="setlist-prev-meta" class="dim"></div>
-        <div id="setlist-prev" class="table like-card">Loading…</div>
-      </div>
-    </section>
-
-    <!-- Row 5: Analytics -->
-    <section id="analytics-section" class="section">
-      <div class="card">
-        <h2 class="section-title">Song Analytics</h2>
-
-        <div class="analytics-grid">
-          <div>
-            <h3 class="subhead">Top 5 – Most Popular</h3>
-            <ol id="top5" class="list"><li class="dim">No data yet.</li></ol>
-          </div>
-          <div>
-            <h3 class="subhead">Top 5 – Least Popular</h3>
-            <ol id="bottom5" class="list"><li class="dim">No data yet.</li></ol>
-          </div>
-        </div>
-
-        <div class="charts charts-2">
-          <div class="chart-card">
-            <h3 class="subhead">Plays by Song (Pie)</h3>
-            <canvas id="pieChart" width="400" height="300"></canvas>
-          </div>
-          <div class="chart-card">
-            <h3 class="subhead">Top Songs (Bar)</h3>
-            <canvas id="barChart" width="400" height="300"></canvas>
-          </div>
-        </div>
-      </div>
+    <!-- Announcements -->
+    <section class="card">
+      <h2>Announcements</h2>
+      <ul id="announcements-list" class="list">
+        <!-- filled by script.js -->
+      </ul>
     </section>
   </main>
-
-  <footer class="site-footer">
-    <div class="container dim">
-      <small>Data sources: announcements.xlsx, members.xlsx, (optional) reminders.xlsx, setlist.xlsx, bible_study.xlsx, special_practice.xlsx — public on GitHub.</small>
-    </div>
-  </footer>
 
   <script src="script.js"></script>
 </body>
