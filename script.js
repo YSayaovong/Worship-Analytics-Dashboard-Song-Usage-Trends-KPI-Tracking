@@ -4,7 +4,7 @@ const ANNOUNCEMENTS_XLSX =
 const SPECIAL_PRACTICE_XLSX =
   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/special_practice/special_practice.xlsx";
 
-// ===== Utilities =====
+// ----- Helpers -----
 const toRawGitHub = (blobUrl) =>
   blobUrl.replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/blob/", "/");
 
@@ -18,7 +18,7 @@ async function fetchSheetJSON(githubBlobUrl, sheetNameOrIndex = 0) {
     typeof sheetNameOrIndex === "number"
       ? wb.Sheets[wb.SheetNames[sheetNameOrIndex]]
       : wb.Sheets[sheetNameOrIndex] || wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { defval: "" }); // array of row objects
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
 }
 
 function excelToDate(val) {
@@ -26,7 +26,6 @@ function excelToDate(val) {
   if (typeof val === "number") {
     const d = XLSX.SSF.parse_date_code(val);
     if (!d) return null;
-    // Treat Excel serial as local date (no GMT strings)
     return new Date(d.y, d.m - 1, d.d, d.H || 0, d.M || 0, d.S || 0);
   }
   const d = new Date(val);
@@ -43,25 +42,23 @@ function withinLastNDays(dt, n = 31) {
   const today = new Date();
   const start = new Date();
   start.setDate(today.getDate() - n);
-  // keep items with date between start..today (inclusive)
   return dt >= start && dt <= today;
 }
 
-// ===== Worship Practice: hide leading labels only =====
-// If your UL has items like "Thursday Practice: 6–8pm", strip the words but keep the time.
+// ===== Worship Practice: strip label words only =====
 function sanitizeWorshipPracticeLabels() {
   const list = document.getElementById("worship-practice-list");
-  if (!list) return; // nothing to do, layout unchanged
-
+  if (!list) return;
   [...list.querySelectorAll("li")].forEach((li) => {
-    const txt = li.textContent.trim();
-    // Remove leading "<Weekday> Practice:" (English) or equivalents (case-insensitive)
-    const cleaned = txt.replace(/^\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+practice\s*:\s*/i, "");
+    const cleaned = li.textContent.trim().replace(
+      /^\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+practice\s*:\s*/i,
+      ""
+    );
     li.textContent = cleaned;
   });
 }
 
-// ===== Special Practice =====
+// ===== Special Practice (Date, Time, Notes) =====
 async function renderSpecialPractice() {
   const tbody = document.getElementById("special-practice-body");
   if (!tbody) return;
@@ -79,7 +76,7 @@ async function renderSpecialPractice() {
         return { date, time, notes };
       })
       .filter((x) => x.date)
-      .sort((a, b) => a.date - b.date); // keep your prior chronological look
+      .sort((a, b) => a.date - b.date);
 
     tbody.innerHTML = "";
     if (!normalized.length) {
@@ -89,10 +86,7 @@ async function renderSpecialPractice() {
 
     normalized.forEach(({ date, time, notes }) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${fmtDate(date)}</td>
-        <td>${time || "-"}</td>
-        <td>${notes || ""}</td>`;
+      tr.innerHTML = `<td>${fmtDate(date)}</td><td>${time || "-"}</td><td>${notes || ""}</td>`;
       tbody.appendChild(tr);
     });
   } catch (err) {
@@ -120,7 +114,7 @@ async function renderAnnouncements() {
       })
       .filter(({ date, english, hmong }) => date && (english || hmong))
       .filter(({ date }) => withinLastNDays(date, 31))
-      .sort((a, b) => b.date - a.date); // newest first
+      .sort((a, b) => b.date - a.date);
 
     list.innerHTML = "";
     if (!normalized.length) {
@@ -132,10 +126,9 @@ async function renderAnnouncements() {
 
     normalized.forEach(({ date, english, hmong }) => {
       const li = document.createElement("li");
-      // Keep your existing typographic look; no new classes/styles
       let html = `<strong>${fmtDate(date)}:</strong>`;
       if (english) html += ` <br><em>(English)</em> ${english}`;
-      if (hmong) html += ` <br><em>(Hmong)</em> ${hmong}`;
+      if (hmong)   html += ` <br><em>(Hmong)</em> ${hmong}`;
       li.innerHTML = html;
       list.appendChild(li);
     });
@@ -145,7 +138,7 @@ async function renderAnnouncements() {
   }
 }
 
-// ===== Init (do not alter your CSS/HTML) =====
+// ===== Init =====
 document.addEventListener("DOMContentLoaded", () => {
   sanitizeWorshipPracticeLabels();
   renderSpecialPractice();

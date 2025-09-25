@@ -4,16 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HFBC – Worship & Announcements</title>
-  <link rel="stylesheet" href="styles.css" />
-  <!-- SheetJS for XLSX parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Keep this exact filename so styles load -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Libraries & app script -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+  <script src="script.js" defer></script>
 </head>
 <body>
   <main class="container">
-    <!-- Worship Practice (labels removed as requested) -->
+    <!-- Worship Practice (we keep your list; JS strips leading labels) -->
     <section class="card">
       <h2>Worship Practice</h2>
-      <p class="muted">Practice times are listed under “Special Practice.”</p>
+      <ul id="worship-practice-list" class="bullets">
+        <!-- Your existing <li> items can stay; JS only removes the words before the times -->
+        <!-- Example:
+        <li>Thursday Practice: 6:00pm–8:00pm</li>
+        <li>Sunday Practice: 8:40am–9:30am</li>
+        -->
+      </ul>
+      <p class="muted">Practice times are also listed under “Special Practice.”</p>
     </section>
 
     <!-- Special Practice -->
@@ -35,21 +46,21 @@
       </div>
     </section>
 
-    <!-- Worship Team Members (keep your current table/content here if needed) -->
+    <!-- Worship Team Members (leave your existing markup here, unchanged) -->
     <section class="card">
       <h2>Worship Team Members</h2>
-      <div id="team-members"><!-- your existing table goes here --></div>
+      <div id="team-members">
+        <!-- your existing table/content -->
+      </div>
     </section>
 
     <!-- Announcements -->
     <section class="card">
       <h2>Announcements</h2>
-      <ul id="announcements-list" class="list">
+      <ul id="announcements-list" class="bullets">
         <!-- filled by script.js -->
       </ul>
     </section>
   </main>
-
-  <script src="script.js"></script>
 </body>
 </html>

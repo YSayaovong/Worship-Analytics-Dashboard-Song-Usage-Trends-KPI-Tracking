@@ -1,18 +1,47 @@
-/* Minimal additions; retains your dark theme look */
-:root { --muted: #9aa3b2; }
+/* Dark look that matches your previous cards/tables */
+:root{
+  --bg: #0b1020;        /* page background */
+  --card: #0f172a;      /* card background */
+  --border: #1f2937;    /* card/table borders */
+  --text: #e5e7eb;      /* primary text */
+  --muted: #9aa3b2;     /* secondary text */
+}
 
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: #0b1020; color: #e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+*{ box-sizing: border-box; }
+html,body{
+  margin:0; padding:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  line-height: 1.5;
+}
 
-.container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-.card { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-h2 { margin: 0 0 .75rem 0; font-size: 1.25rem; }
-.muted { color: var(--muted); margin: .25rem 0 0 0; }
+.container{
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
 
-.table-wrap { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { padding: .6rem .75rem; border-bottom: 1px solid #1f2937; text-align: left; }
-.table th { font-weight: 600; }
+.card{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
 
-.list { list-style: disc; padding-left: 1.25rem; }
-.list li { margin: .4rem 0; }
+h2{ margin: 0 0 .75rem 0; font-size: 1.2rem; }
+.muted{ color: var(--muted); margin-top:.25rem; }
+
+.bullets{ padding-left: 1.25rem; margin: .25rem 0 .25rem; }
+.bullets li{ margin: .35rem 0; }
+
+.table-wrap{ overflow-x: auto; }
+.table{ width:100%; border-collapse: collapse; }
+.table th, .table td{
+  padding: .6rem .75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.table th{ font-weight: 600; }
