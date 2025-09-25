@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HFBC – Worship Hub</title>
+  <title>HFBC – Praise and Worship</title>
 
-  <link rel="stylesheet" href="style.css?v=2025-09-25f" />
+  <link rel="stylesheet" href="style.css?v=2025-09-26b" />
 
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
@@ -13,7 +13,7 @@
   <script src="https://www.gstatic.com/charts/loader.js"></script>
 
   <!-- App -->
-  <script src="script.js?v=2025-09-25f" defer></script>
+  <script src="script.js?v=2025-09-26b" defer></script>
 </head>
 <body>
   <main class="container">
@@ -102,24 +102,33 @@
     <!-- Song Analytics -->
     <section class="card">
       <h2>Song Analytics</h2>
-
-      <div class="kpi-row">
-        <div class="kpi">
-          <div class="kpi-label">Played vs Not Played</div>
-          <div class="kpi-value" id="kpi-played-ratio">—</div>
-          <div class="kpi-sub" id="kpi-played-sub">Loading…</div>
-        </div>
-      </div>
-
       <div class="charts">
         <div class="chart-card">
-          <h3>Top 10 Songs (3D Pie)</h3>
-          <div id="chart-top10" class="chart-area"></div>
+          <h3>Top 10 Played Songs (3D Pie)</h3>
+          <div id="chart-top10-played" class="chart-area"></div>
         </div>
         <div class="chart-card">
-          <h3>Played vs Not Played</h3>
-          <div id="chart-played-ratio" class="chart-area"></div>
+          <h3>Top 10 Songs This Year — Plays</h3>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Song</th><th>Times Played (This Year)</th></tr></thead>
+              <tbody id="table-top10-year"></tbody>
+            </table>
+          </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Bible Study Log -->
+    <section class="card">
+      <h2>Bible Study Log</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Date</th><th>Topic / Passage</th><th>Bible Verse</th></tr>
+          </thead>
+          <tbody id="bible-study-body"></tbody>
+        </table>
       </div>
     </section>
   </main>

@@ -4,8 +4,8 @@ const SRC = {
   members:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx",
   setlist:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx",
   catalog:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/songs_catalog.csv",
-  kpiTop10:     "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/kpi_top10.csv",
   addPractice:  "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/special_practice/special_practice.xlsx",
+  bibleStudy:   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx",
 };
 
 /***** UTILITIES *****/
@@ -33,7 +33,6 @@ async function fetchCsv(blobUrl) {
   });
 }
 
-// Excel/str/serial → Date (local)
 function excelToDate(val) {
   if (val == null || val === "") return null;
   if (typeof val === "number") {
@@ -45,16 +44,11 @@ function excelToDate(val) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Formatting
 const DAY_ABBR = ["Sun","Mon","Tues","Wed","Thurs","Fri","Sat"];
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec"];
-function fmtDateOnly(dt) {
-  return `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
-}
-function withinLastNDays(dt, n = 31) {
-  const today = new Date(); const start = new Date(); start.setDate(today.getDate() - n);
-  return dt >= start && dt <= today;
-}
+const fmtDateOnly = (dt) => `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
+function withinLastNDays(dt, n = 31) { const t = new Date(); const s = new Date(); s.setDate(t.getDate() - n); return dt >= s && dt <= t; }
+const norm = (s) => String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
 
 /***** WEEKLY PRACTICES (rolling) *****/
 function nextWeeklyOccurrence(targetWeekday, startH, startM, endH, endM) {
@@ -77,27 +71,42 @@ function renderWeeklyPractices() {
    .forEach(t => { const li=document.createElement("li"); li.textContent=t; ul.appendChild(li); });
 }
 
-/***** ADDITIONAL PRACTICE (non-Thu/Sun; reads "ADDITIONAL PRACTICE") *****/
+/***** ADDITIONAL PRACTICE (Date + Time from special_practice.xlsx) *****/
+function detectTimeInRow(r) {
+  for (const [k,v] of Object.entries(r)) {
+    const nk = norm(k);
+    if ((nk.includes("additional") || nk.includes("time")) && String(v).trim()) return String(v).trim();
+  }
+  const timeLike = Object.values(r).map(v => String(v||"")).find(s => /\d{1,2}:\d{2}\s*(am|pm)?\s*-\s*\d{1,2}:\d{2}\s*(am|pm)?/i.test(s));
+  if (timeLike) return timeLike.trim();
+  const vals = Object.values(r);
+  if (vals.length === 2) {
+    const [a,b] = vals;
+    const aDate = excelToDate(a); const bDate = excelToDate(b);
+    if (aDate && !bDate) return String(b||"").trim();
+    if (bDate && !aDate) return String(a||"").trim();
+  }
+  return "";
+}
 async function renderAdditionalPractice() {
   const tbody = document.getElementById("additional-practice-body");
   if (!tbody) return;
   try {
     const rows = await fetchXlsxRows(SRC.addPractice);
-    const normalized = rows.map((r) => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-      const date = excelToDate(o.date ?? o["practice date"] ?? o.day ?? "");
-      // robust: accept multiple header variants for the time column
-      const time = String(
-        o["additional practice"] ?? o["additionalpractice"] ??
-        o["time"] ?? o["practice time"] ?? o["notes"] ?? ""
-      ).trim();
-      return { date, time };
-    }).filter(x => x.date && ![0,4].includes(x.date.getDay())) // exclude Sun(0), Thu(4)
-      .sort((a,b) => a.date - b.date);
+    const out = [];
+    rows.forEach(r => {
+      const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+      const date = excelToDate(m.date ?? m.practicedate ?? m.day ?? m.practice ?? m.practice_dt);
+      if (!date) return;
+      if ([0,4].includes(date.getDay())) return;
+      const time = detectTimeInRow(r);
+      out.push({ date, time });
+    });
 
+    out.sort((a,b)=>a.date-b.date);
     tbody.innerHTML = "";
-    if (!normalized.length) { tbody.innerHTML = `<tr><td colspan="2">No additional practices listed.</td></tr>`; return; }
-    normalized.forEach(({date,time}) => {
+    if (!out.length) { tbody.innerHTML = `<tr><td colspan="2">No additional practices listed.</td></tr>`; return; }
+    out.forEach(({date,time}) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${time || "-"}</td>`;
       tbody.appendChild(tr);
@@ -115,12 +124,11 @@ async function renderMembers() {
   try {
     const rows = await fetchXlsxRows(SRC.members);
     const mapped = rows.map(r => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-      return {
-        name: String(o.name ?? o.member ?? o["full name"] ?? "").trim(),
-        role: String(o.role ?? o.position ?? "").trim()
-      };
+      const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+      return { name: String(m.name ?? m.member ?? m.fullname ?? "").trim(),
+               role: String(m.role ?? m.position ?? "").trim() };
     }).filter(x => x.name || x.role);
+
     tbody.innerHTML = "";
     if (!mapped.length) { tbody.innerHTML = `<tr><td colspan="2">No members listed.</td></tr>`; return; }
     mapped.forEach(({name, role}) => {
@@ -140,15 +148,15 @@ async function renderAnnouncements() {
   if (!tbody) return;
   try {
     const rows = await fetchXlsxRows(SRC.announcements);
-    const data = rows.map((r) => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-      const date = excelToDate(o.date ?? o["announcement date"] ?? "");
-      const english = String(o.announcement ?? o.english ?? o.message ?? "").trim();
-      const hmong   = String(o["lus tshaj tawm"] ?? o.hmong ?? "").trim();
+    const data = rows.map(r => {
+      const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+      const date = excelToDate(m.date ?? m.announcementdate);
+      const english = String(m.announcement ?? m.english ?? m.message ?? "").trim();
+      const hmong   = String(m.lustshajtawm ?? m.hmong ?? "").trim();
       return { date, english, hmong };
     }).filter(x => x.date && (x.english || x.hmong))
       .filter(x => withinLastNDays(x.date, 31))
-      .sort((a,b) => b.date - a.date);
+      .sort((a,b)=>b.date-a.date);
 
     tbody.innerHTML = "";
     if (!data.length) { tbody.innerHTML = `<tr><td colspan="3">No announcements in the last 31 days.</td></tr>`; return; }
@@ -163,13 +171,23 @@ async function renderAnnouncements() {
   }
 }
 
-/***** SETLIST (only Date, Song, Topic; split upcoming/last) *****/
-function normalizeSetlistRow(r) {
-  const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-  const date = excelToDate(o.date ?? o.day ?? o["service date"] ?? "");
-  const song = String(o.song ?? o.title ?? "").trim();
-  const topic = String(o.topic ?? o.notes ?? "").trim();
+/***** SETLIST (Date, Song, Topic; split upcoming/last; no repeated titles per date) *****/
+function normSetlistRow(r) {
+  const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+  const date = excelToDate(m.date ?? m.day ?? m.servicedate);
+  const song = String(m.song ?? m.title ?? "").trim();
+  const topic = String(m.topic ?? m.notes ?? "").trim();
   return { date, song, topic };
+}
+function dedupeByTitle(list) {
+  const seen = new Set();
+  return list.filter(item => {
+    const key = (item.song || "").toLowerCase();
+    if (!key) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 async function renderSetlist() {
   const upHead  = document.getElementById("setlist-up-head");
@@ -179,9 +197,8 @@ async function renderSetlist() {
   if (!upHead || !upBody || !lsHead || !lsBody) return;
 
   try {
-    const rows = (await fetchXlsxRows(SRC.setlist)).map(normalizeSetlistRow).filter(x => x.date && x.song);
+    const rows = (await fetchXlsxRows(SRC.setlist)).map(normSetlistRow).filter(x => x.date && x.song);
 
-    // Group by date (YYYY-MM-DD)
     const byDate = new Map();
     for (const r of rows) {
       const key = r.date.toISOString().slice(0,10);
@@ -190,26 +207,26 @@ async function renderSetlist() {
     }
     const dates = Array.from(byDate.keys()).map(d => new Date(d)).sort((a,b)=>a-b);
     const today = new Date();
-    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const upcomingDate = dates.find(d => d >= todayDateOnly);
-    const lastDate = [...dates].filter(d => d < todayDateOnly).pop();
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const upcomingDate = dates.find(d => d >= todayOnly);
+    const lastDate = [...dates].filter(d => d < todayOnly).pop();
 
-    function renderBlock(dateObj, headEl, bodyEl) {
+    const renderBlock = (dateObj, headEl, bodyEl) => {
       headEl.innerHTML = `<tr><th>Date</th><th>Song</th><th>Topic</th></tr>`;
       bodyEl.innerHTML = "";
       if (!dateObj) { bodyEl.innerHTML = `<tr><td colspan="3">No data.</td></tr>`; return; }
       const key = dateObj.toISOString().slice(0,10);
-      const list = byDate.get(key) || [];
+      const list = dedupeByTitle(byDate.get(key) || []);
       if (!list.length) { bodyEl.innerHTML = `<tr><td colspan="3">No songs for this date.</td></tr>`; return; }
       list.forEach(({date, song, topic}) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${song}</td><td>${topic}</td>`;
         bodyEl.appendChild(tr);
       });
-    }
+    };
 
     renderBlock(upcomingDate, upHead, upBody);
-    renderBlock(lastDate, lsHead, lsBody);
+    renderBlock(lastDate,  lsHead, lsBody);
   } catch (e) {
     console.error("Setlist error:", e);
     upHead.innerHTML = "<tr><th>Error</th></tr>";
@@ -219,87 +236,124 @@ async function renderSetlist() {
   }
 }
 
-/***** ANALYTICS *****/
+/***** ANALYTICS — Top 10 Played (all time) + Top 10 counts for current year *****/
 function loadGoogle() {
   return new Promise((resolve) => { google.charts.load("current", { packages: ["corechart"] }); google.charts.setOnLoadCallback(resolve); });
 }
+function isExcludedSong(name) {
+  const s = String(name||"").trim().toLowerCase();
+  if (!s) return true;
+  if (s === "na" || s === "n/a") return true;
+  if (s.includes("church close")) return true;
+  return false;
+}
+async function computeSongCounts(allRows) {
+  // Build counts with per-date dedupe
+  const byDate = new Map();
+  allRows.forEach(r => {
+    const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+    const date = excelToDate(m.date ?? m.day ?? m.servicedate);
+    const title = String(m.song ?? m.title ?? "").trim();
+    if (!date || isExcludedSong(title)) return;
+    const key = date.toISOString().slice(0,10);
+    if (!byDate.has(key)) byDate.set(key, new Set());
+    byDate.get(key).add(title.toLowerCase());
+  });
 
-// Top 10 (3D pie)
-async function renderTop10Pie() {
-  const el = document.getElementById("chart-top10");
-  if (!el) return;
-  try {
-    await loadGoogle();
-    const rows = await fetchCsv(SRC.kpiTop10);
-    const headers = rows.length ? Object.keys(rows[0]) : [];
-    let nameKey = headers.find(h => /song|title/i.test(h)) || headers[0];
-    let valKey  = headers.find(h => /play|count|times|value|freq|uses/i.test(h)) || headers[1];
+  const counts = new Map();
+  byDate.forEach(set => set.forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));
 
-    const dataArr = [["Song", "Plays"]];
-    rows.forEach(r => {
-      const name = String(r?.[nameKey] ?? "").trim();
-      let valRaw = (r?.[valKey] ?? "0").toString().trim().replace(/,/g,"");
-      const val = Number(valRaw);
-      if (name && isFinite(val)) dataArr.push([name, val]);
-    });
+  const titleCase = new Map();
+  allRows.forEach(r => {
+    const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+    const t = String(m.song ?? m.title ?? "").trim();
+    if (!isExcludedSong(t)) {
+      const key = t.toLowerCase();
+      if (!titleCase.has(key)) titleCase.set(key, t);
+    }
+  });
 
-    if (dataArr.length <= 1) { el.innerHTML = "Unable to render Top 10."; return; }
-    const data = google.visualization.arrayToDataTable(dataArr);
-    const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
-    const chart = new google.visualization.PieChart(el);
-    chart.draw(data, options);
-  } catch (e) {
-    console.error("Top10 Pie error:", e);
-    el.innerHTML = "Unable to render Top 10.";
+  return { counts, titleCase };
+}
+async function renderTopCharts() {
+  await loadGoogle();
+  const slRows = await fetchXlsxRows(SRC.setlist);
+
+  // All-time counts
+  const { counts, titleCase } = await computeSongCounts(slRows);
+  const displayCounts = Array.from(counts.entries()).map(([k,v]) => [titleCase.get(k) || k, v]);
+  const topPlayed = displayCounts
+    .sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0]))
+    .slice(0,10);
+
+  // Draw all-time pie
+  const el1 = document.getElementById("chart-top10-played");
+  if (el1) {
+    if (!topPlayed.length) { el1.innerHTML = "No data."; }
+    else {
+      const data = google.visualization.arrayToDataTable([["Song","Plays"], ...topPlayed]);
+      const options = { is3D:true, backgroundColor:"transparent",
+        legend:{ textStyle:{ color:"#e5e7eb" } }, chartArea:{ width:"90%", height:"80%" } };
+      const chart = new google.visualization.PieChart(el1);
+      chart.draw(data, options);
+    }
+  }
+
+  // Current year counts
+  const year = new Date().getFullYear();
+  const rowsThisYear = slRows.filter(r => {
+    const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+    const d = excelToDate(m.date ?? m.day ?? m.servicedate);
+    return d && d.getFullYear() === year;
+  });
+  const { counts: countsYear, titleCase: titleCaseYear } = await computeSongCounts(rowsThisYear);
+  const displayYear = Array.from(countsYear.entries())
+    .map(([k,v]) => [titleCaseYear.get(k) || k, v])
+    .sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0]))
+    .slice(0,10);
+
+  // Render table for this year
+  const tbody = document.getElementById("table-top10-year");
+  if (tbody) {
+    tbody.innerHTML = "";
+    if (!displayYear.length) {
+      tbody.innerHTML = `<tr><td colspan="2">No songs played this year.</td></tr>`;
+    } else {
+      displayYear.forEach(([name, plays]) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${name}</td><td>${plays}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
   }
 }
 
-// Played vs Not Played — from songs_catalog.csv only
-async function renderPlayedRatio() {
-  const kpiVal = document.getElementById("kpi-played-ratio");
-  const kpiSub = document.getElementById("kpi-played-sub");
-  const el = document.getElementById("chart-played-ratio");
-  if (!kpiVal || !kpiSub || !el) return;
-
+/***** BIBLE STUDY LOG *****/
+async function renderBibleStudy() {
+  const tbody = document.getElementById("bible-study-body");
+  if (!tbody) return;
   try {
-    await loadGoogle();
-    const rows = await fetchCsv(SRC.catalog);
+    const rows = await fetchXlsxRows(SRC.bibleStudy);
+    const items = rows.map(r => {
+      const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
+      const date   = excelToDate(m.date ?? m.studydate ?? m.sessiondate ?? m.day);
+      const topic  = String(m.topic ?? m.passage ?? m.study ?? m.series ?? "").trim();
+      const leader = String(m.leader ?? m.teacher ?? m.speaker ?? "").trim();
+      const notes  = String(m.notes ?? m.note ?? "").trim();
+      return { date, topic, leader, notes };
+    }).filter(x => x.date || x.topic || x.leader || x.notes)
+      .sort((a,b) => (b.date?.getTime()||0) - (a.date?.getTime()||0));
 
-    // Identify ID-like columns to ignore when deciding "played"
-    const idLike = new Set(["number", "no", "index", "#"]);
-
-    let played = 0, total = 0;
-    rows.forEach(row => {
-      total += 1;
-      // "Played" if any non-ID column has a non-blank value
-      const hasName = Object.entries(row).some(([k,v]) => {
-        const key = String(k).trim().toLowerCase();
-        if (idLike.has(key)) return false;
-        const val = String(v ?? "").trim();
-        return val.length > 0;
-      });
-      if (hasName) played += 1;
+    tbody.innerHTML = "";
+    if (!items.length) { tbody.innerHTML = `<tr><td colspan="4">No bible study entries found.</td></tr>`; return; }
+    items.forEach(({date, topic, leader, notes}) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${date ? fmtDateOnly(date) : "-"}</td><td>${topic||"-"}</td><td>${leader||"-"}</td><td>${notes||""}</td>`;
+      tbody.appendChild(tr);
     });
-
-    const notPlayed = Math.max(total - played, 0);
-    const pct = total ? Math.round((played / total) * 100) : 0;
-
-    kpiVal.textContent = `${pct}%`;
-    kpiSub.textContent = `Played ${played} of ${total}`;
-
-    const data = google.visualization.arrayToDataTable([
-      ["Type","Count"],
-      ["Played", played],
-      ["Not Played", notPlayed],
-    ]);
-    const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
-    const chart = new google.visualization.PieChart(el);
-    chart.draw(data, options);
   } catch (e) {
-    console.error("Played Ratio error:", e);
-    kpiVal.textContent = "—";
-    kpiSub.textContent = "Unable to compute";
-    el.innerHTML = "Unable to render Played/Not Played.";
+    console.error("Bible Study error:", e);
+    tbody.innerHTML = `<tr><td colspan="4">Unable to load bible study log.</td></tr>`;
   }
 }
 
@@ -311,12 +365,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderAdditionalPractice(),
       renderMembers(),
       renderAnnouncements(),
-      renderSetlist()
+      renderSetlist(),
+      renderBibleStudy()
     ]);
-    await Promise.all([
-      renderTop10Pie(),
-      renderPlayedRatio()
-    ]);
+    await renderTopCharts();
   } catch (e) {
     console.error("Init error:", e);
   }

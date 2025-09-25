@@ -56,21 +56,9 @@ h3{ margin: .25rem 0 .75rem; font-size: 1.05rem; color: var(--accent); }
   .grid-2{ grid-template-columns: 1fr 1fr; }
 }
 
-.kpi-row{ display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
-.kpi{
-  background:#0c142d;
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:1rem;
-  min-width: 240px;
-}
-.kpi-label{ color:var(--muted); font-size:.9rem; }
-.kpi-value{ font-size:1.6rem; font-weight:700; margin-top:.25rem; }
-.kpi-sub{ color:var(--muted); font-size:.85rem; }
-
 .charts{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap:1rem;
   margin-bottom:1rem;
 }
