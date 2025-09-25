@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
 HFBC_Praise_Worship – KPI ETL
-Reads raw spreadsheets/CSVs, validates, applies business rules,
-and writes curated KPI CSVs to /data for the dashboard.
-
+Reproducible KPIs with Sunday 12:30 PM CT window and exclusions.
 Requires: pandas, openpyxl
 """
 
@@ -14,22 +12,17 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 
-# -------- CONFIG --------
+# ---------- CONFIG ----------
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
-SETLIST_XLSX = REPO_ROOT / "setlist" / "setlist.xlsx"              # Required
-SONGS_CATALOG_CSV = REPO_ROOT / "setlist" / "songs_catalog.csv"    # Required
+SETLIST_XLSX = REPO_ROOT / "setlist" / "setlist.xlsx"
+SONGS_CATALOG_CSV = REPO_ROOT / "setlist" / "songs_catalog.csv"
 
-# Business rules
 TZ = ZoneInfo("America/Chicago")
-ROLL_HOUR = 12
-ROLL_MIN = 30                   # Sunday 12:30 PM rollover
-WEEK_WINDOW = 52                # rolling weeks
-EXCLUDE_TITLES = {
-    "NA", "N/A", "Church Close", "Church Close - Flood"
-}
+ROLL_HOUR, ROLL_MIN = 12, 30        # Sunday 12:30 PM CT
+WEEK_WINDOW = 52
+EXCLUDE_TITLES = {"NA", "N/A", "Church Close", "Church Close - Flood"}
 
-# Column expectations (case-insensitive matching)
 SETLIST_COLMAP = {
     "date": {"date", "service_date", "Date", "DATE"},
     "title": {"title", "song", "Song", "Title"},
@@ -41,13 +34,11 @@ SONGSCAT_COLMAP = {
     "in_hymnal": {"in_hymnal", "hymnal", "In_Hymnal"},
 }
 
-# -------- UTIL --------
+# ---------- UTIL ----------
 def pick_col(df: pd.DataFrame, candidates: set[str], required: bool, label: str) -> str:
-    # exact match
     for c in df.columns:
         if c in candidates:
             return c
-    # case-insensitive match
     lower = {c.lower(): c for c in df.columns}
     for cand in candidates:
         if cand.lower() in lower:
@@ -57,20 +48,25 @@ def pick_col(df: pd.DataFrame, candidates: set[str], required: bool, label: str)
     return None
 
 def sunday_rollover_cutoff(now_ct: datetime) -> datetime:
-    # Most recent Sunday 12:30 PM CT
-    weekday = now_ct.weekday()  # Mon=0 ... Sun=6
-    days_since_sun = (weekday + 1) % 7
-    this_sunday = (now_ct - timedelta(days=days_since_sun)).replace(
+    """Return tz-aware CT datetime for most recent Sunday 12:30 PM."""
+    wd = now_ct.weekday()  # Mon=0 ... Sun=6
+    days_since_sun = (wd + 1) % 7
+    this_sun = (now_ct - timedelta(days=days_since_sun)).replace(
         hour=ROLL_HOUR, minute=ROLL_MIN, second=0, microsecond=0
     )
-    return this_sunday if now_ct >= this_sunday else this_sunday - timedelta(days=7)
+    return this_sun if now_ct >= this_sun else this_sun - timedelta(days=7)
 
-def start_of_window(cutoff: datetime) -> datetime:
-    return cutoff - timedelta(weeks=WEEK_WINDOW)
+def get_naive_window(now_ct: datetime) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Compute [start, cutoff) as tz-naive pandas Timestamps (to match Excel)."""
+    cutoff_ct = sunday_rollover_cutoff(now_ct)         # tz-aware
+    cutoff = pd.Timestamp(cutoff_ct).tz_localize(None) # strip tz -> naive
+    start = cutoff - pd.Timedelta(weeks=WEEK_WINDOW)
+    return start, cutoff
 
 def normalize_titles(s: pd.Series) -> pd.Series:
     return s.astype(str).str.strip()
 
+# ---------- LOAD ----------
 def load_setlist() -> pd.DataFrame:
     if not SETLIST_XLSX.exists():
         raise FileNotFoundError(f"Missing file: {SETLIST_XLSX}")
@@ -81,19 +77,16 @@ def load_setlist() -> pd.DataFrame:
     c_source = pick_col(df, SETLIST_COLMAP["source"], False, "source")
 
     out = pd.DataFrame({
-        "Date": pd.to_datetime(df[c_date], errors="coerce"),
+        "Date": pd.to_datetime(df[c_date], errors="coerce"),  # -> datetime64[ns] (naive)
         "Title": normalize_titles(df[c_title]),
     })
     out["Source"] = normalize_titles(df[c_source]) if c_source else "Unknown"
 
-    if out["Date"].isna().any():
-        bad = out[out["Date"].isna()]
-        raise ValueError(f"Unparseable dates in setlist.xlsx rows:\n{bad.to_string(index=False)}")
-    if out["Title"].eq("").any():
-        raise ValueError("Empty song titles found in setlist.xlsx")
-
-    # Deduplicate per (Date, Title)
-    return out.drop_duplicates(subset=["Date", "Title"]).reset_index(drop=True)
+    # drop bad rows; keep dataset naive (no tz)
+    out = out.dropna(subset=["Date"])
+    out = out[out["Title"].astype(str).str.len() > 0]
+    out = out.drop_duplicates(subset=["Date", "Title"]).reset_index(drop=True)
+    return out
 
 def load_songs_catalog() -> pd.DataFrame:
     if not SONGS_CATALOG_CSV.exists():
@@ -105,74 +98,56 @@ def load_songs_catalog() -> pd.DataFrame:
     c_inh = pick_col(df, SONGSCAT_COLMAP["in_hymnal"], False, "in_hymnal")
 
     out = pd.DataFrame({"Title": normalize_titles(df[c_title])})
-    if c_num:
-        out["Song_Number"] = df[c_num]
-    else:
-        out["Song_Number"] = pd.NA
-    if c_inh:
-        out["In_Hymnal"] = df[c_inh].astype(str).str.lower().isin({"1", "true", "yes", "y"})
-    else:
-        out["In_Hymnal"] = True
-
+    out["Song_Number"] = df[c_num] if c_num else pd.NA
+    out["In_Hymnal"] = df[c_inh].astype(str).str.lower().isin({"1", "true", "yes", "y"}) if c_inh else True
     return out.drop_duplicates(subset=["Title"]).reset_index(drop=True)
 
-def filter_business_rules(df: pd.DataFrame, now_ct: datetime) -> pd.DataFrame:
-    cutoff = sunday_rollover_cutoff(now_ct)
-    start = start_of_window(cutoff)
-
+# ---------- RULES & KPIs ----------
+def apply_window_and_rules(df: pd.DataFrame, now_ct: datetime) -> pd.DataFrame:
+    start, cutoff = get_naive_window(now_ct)  # both tz-naive
     dfw = df[(df["Date"] >= start) & (df["Date"] < cutoff)].copy()
-
-    excl_norm = {t.strip().lower() for t in EXCLUDE_TITLES}
-    dfw = dfw[~dfw["Title"].str.lower().isin(excl_norm)].copy()
+    excl = {t.strip().lower() for t in EXCLUDE_TITLES}
+    dfw = dfw[~dfw["Title"].str.lower().isin(excl)]
     return dfw
 
-# -------- KPI COMPUTATIONS --------
 def kpi_top10(dfw: pd.DataFrame) -> pd.DataFrame:
-    counts = (
-        dfw.groupby("Title")
-           .size()
-           .reset_index(name="Plays")
-           .sort_values("Plays", ascending=False)
-    )
-    return counts.head(10)
+    if dfw.empty:
+        return pd.DataFrame(columns=["Title", "Plays"])
+    return (dfw.groupby("Title").size()
+            .reset_index(name="Plays")
+            .sort_values("Plays", ascending=False)
+            .head(10))
 
 def kpi_by_source(dfw: pd.DataFrame) -> pd.DataFrame:
-    kpi = (
-        dfw.groupby("Source")
-           .size()
-           .reset_index(name="Plays")
-           .sort_values("Plays", ascending=False)
-    )
-    return kpi
+    if dfw.empty:
+        return pd.DataFrame(columns=["Source", "Plays"])
+    return (dfw.groupby("Source").size()
+            .reset_index(name="Plays")
+            .sort_values("Plays", ascending=False))
 
 def kpi_hymnal_coverage(dfw: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
-    used_titles = set(dfw["Title"].unique())
+    if catalog.empty:
+        return pd.DataFrame([{"Hymnal_Songs": 0, "Used_Hymnal_Songs": 0, "Coverage_%": 0.0}])
+    used = set(dfw["Title"].unique())
     cat = catalog[["Title", "In_Hymnal"]].copy()
-    cat["Used"] = cat["Title"].isin(used_titles)
-
+    cat["Used"] = cat["Title"].isin(used)
     denom = int((cat["In_Hymnal"] == True).sum())
     num = int(((cat["In_Hymnal"] == True) & (cat["Used"] == True)).sum())
-    coverage = 0.0 if denom == 0 else round(100 * num / denom, 2)
-
-    return pd.DataFrame([{
-        "Hymnal_Songs": denom,
-        "Used_Hymnal_Songs": num,
-        "Coverage_%": coverage
-    }])
+    cov = 0.0 if denom == 0 else round(100 * num / denom, 2)
+    return pd.DataFrame([{"Hymnal_Songs": denom, "Used_Hymnal_Songs": num, "Coverage_%": cov}])
 
 def kpi_hymnal_unused(dfw: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
+    if catalog.empty:
+        return pd.DataFrame(columns=["Song_Number", "Title"])
     used = set(dfw["Title"].unique())
     hymnal = catalog[catalog["In_Hymnal"] == True].copy()
     hymnal["Used"] = hymnal["Title"].isin(used)
-    # Sort by Song_Number, send NaNs to end (corrected)
-    unused = (
-        hymnal[hymnal["Used"] == False][["Song_Number", "Title"]]
-        .sort_values(by="Song_Number", na_position="last")
-        .reset_index(drop=True)
+    unused = hymnal[hymnal["Used"] == False][["Song_Number", "Title"]].sort_values(
+        by="Song_Number", na_position="last"
     )
-    return unused
+    return unused.reset_index(drop=True)
 
-# -------- MAIN --------
+# ---------- MAIN ----------
 def main():
     now_ct = datetime.now(TZ)
     print(f"[INFO] Running ETL at {now_ct.isoformat()}")
@@ -182,24 +157,21 @@ def main():
     setlist = load_setlist()
     catalog = load_songs_catalog()
 
-    dfw = filter_business_rules(setlist, now_ct)
+    dfw = apply_window_and_rules(setlist, now_ct)
     if dfw.empty:
-        print("[WARN] No rows within the 52-week window after exclusions.")
+        print("[WARN] No rows in last 52 weeks after exclusions.")
 
     top10 = kpi_top10(dfw)
     bysrc = kpi_by_source(dfw)
-    cov = kpi_hymnal_coverage(dfw, catalog)
-    unused = kpi_hymnal_unused(dfw, catalog)
+    cov   = kpi_hymnal_coverage(dfw, catalog)
+    unused= kpi_hymnal_unused(dfw, catalog)
 
     (DATA_DIR / "kpi_top10.csv").write_text(top10.to_csv(index=False))
     (DATA_DIR / "kpi_by_source.csv").write_text(bysrc.to_csv(index=False))
     (DATA_DIR / "kpi_hymnal_coverage.csv").write_text(cov.to_csv(index=False))
     (DATA_DIR / "hymnal_unused.csv").write_text(unused.to_csv(index=False))
 
-    print("[OK] Wrote data/kpi_top10.csv")
-    print("[OK] Wrote data/kpi_by_source.csv")
-    print("[OK] Wrote data/kpi_hymnal_coverage.csv")
-    print("[OK] Wrote data/hymnal_unused.csv")
+    print("[OK] data/*.csv refreshed")
 
 if __name__ == "__main__":
     try:
