@@ -181,3 +181,121 @@ document.addEventListener("DOMContentLoaded", () => {
   const style = el("style", { html: css });
   document.head.appendChild(style);
 })();
+
+/* ===========================
+   Data Analyst — additive block
+   =========================== */
+
+/* 1) Tiny CSV loader (simple, no commas inside cells) */
+async function daFetchCSV(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  const text = await res.text();
+  const rows = text.trim().split("\n").map(r => r.split(","));
+  const header = rows.shift();
+  return rows.map(r =>
+    Object.fromEntries(header.map((h, i) => [h.trim(), (r[i] ?? "").trim()]))
+  );
+}
+
+/* 2) Mount a Data Analyst section under the existing Song Analytics card */
+function daMountHost() {
+  const analyticsCard = document.querySelector("#analytics-section .card");
+  if (!analyticsCard) return null;
+
+  // Host row uses your existing grid/card classes (no new styles introduced)
+  const host = document.createElement("div");
+  host.id = "da-grid";
+  host.className = "charts charts-2";
+  host.innerHTML = `
+    <div class="chart-card">
+      <h3 class="subhead">Hymnal Coverage</h3>
+      <div id="da-coverage" class="table like-card"><p class="dim" style="padding:8px;margin:0">Loading…</p></div>
+    </div>
+    <div class="chart-card">
+      <h3 class="subhead">Usage by Source</h3>
+      <div id="da-by-source" class="table like-card"><p class="dim" style="padding:8px;margin:0">Loading…</p></div>
+    </div>
+    <div class="chart-card" style="grid-column:1/-1">
+      <h3 class="subhead">Unused Hymnal Numbers</h3>
+      <div id="da-unused" class="table like-card"><p class="dim" style="padding:8px;margin:0">Loading…</p></div>
+    </div>
+  `;
+  analyticsCard.appendChild(host);
+  return host;
+}
+
+/* 3) Render helpers (tables only; uses your .table/.like-card styles) */
+function daRenderCoverage(rows) {
+  const obj = Object.fromEntries(rows.map(r => [r.metric, r.value]));
+  const html = `
+    <table>
+      <tbody>
+        <tr><th>Used</th><td>${obj.hymnal_coverage_used ?? "—"} / 352</td></tr>
+        <tr><th>Unused</th><td>${obj.hymnal_coverage_unused ?? "—"}</td></tr>
+        <tr><th>Coverage</th><td>${obj.hymnal_coverage_percent ?? "—"}%</td></tr>
+      </tbody>
+    </table>`;
+  document.getElementById("da-coverage").innerHTML = html;
+}
+
+function daRenderBySource(rows) {
+  if (!rows?.length) {
+    document.getElementById("da-by-source").innerHTML =
+      `<p class="dim" style="padding:8px;margin:0">No data.</p>`;
+    return;
+  }
+  const html = `
+    <table>
+      <thead><tr><th>Source</th><th>Count</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr><td>${r.source_final}</td><td>${r.count}</td></tr>`).join("")}
+      </tbody>
+    </table>`;
+  document.getElementById("da-by-source").innerHTML = html;
+}
+
+function daRenderUnused(rows) {
+  if (!rows?.length) {
+    document.getElementById("da-unused").innerHTML =
+      `<p class="dim" style="padding:8px;margin:0">All hymnal numbers have been used at least once.</p>`;
+    return;
+  }
+  const nums = rows
+    .map(r => parseInt(r.unused_number, 10))
+    .filter(n => !Number.isNaN(n))
+    .sort((a,b) => a - b)
+    .slice(0, 50);
+
+  const html = `
+    <table>
+      <thead><tr><th>Unused (first 50)</th></tr></thead>
+      <tbody>
+        <tr><td>${nums.map(n => `#${n}`).join(", ")}</td></tr>
+      </tbody>
+    </table>`;
+  document.getElementById("da-unused").innerHTML = html;
+}
+
+/* 4) Loader that pulls weekly CSVs from /data/ and renders */
+async function loadDataAnalyst() {
+  if (!document.getElementById("da-grid")) daMountHost();
+  try {
+    const [cov, bysrc, unused] = await Promise.all([
+      daFetchCSV("data/kpi_hymnal_coverage.csv").catch(() => []),
+      daFetchCSV("data/kpi_by_source.csv").catch(() => []),
+      daFetchCSV("data/hymnal_unused.csv").catch(() => []),
+    ]);
+    daRenderCoverage(cov);
+    daRenderBySource(bysrc);
+    daRenderUnused(unused);
+  } catch (e) {
+    // Fail softly without disrupting the rest of the page
+    console.warn("Data Analyst load failed:", e);
+  }
+}
+
+/* 5) Hook into your existing boot sequence */
+document.addEventListener("DOMContentLoaded", () => {
+  loadDataAnalyst();
+});
