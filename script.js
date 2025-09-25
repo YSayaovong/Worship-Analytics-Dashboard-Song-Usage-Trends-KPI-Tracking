@@ -2,13 +2,10 @@
 const SRC = {
   announcements: "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx",
   bibleStudy:   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/bible_study/bible_study.xlsx",
-  hymnalUnused: "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/hymnal_unused.csv",
-  kpiBySource:  "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/kpi_by_source.csv",
-  kpiCoverage:  "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/kpi_hymnal_coverage.csv",
-  kpiTop10:     "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/kpi_top10.csv",
   members:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx",
   setlist:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx",
   catalog:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/songs_catalog.csv",
+  kpiTop10:     "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/data/kpi_top10.csv",
   addPractice:  "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/special_practice/special_practice.xlsx",
 };
 
@@ -17,7 +14,7 @@ const toRaw = (blobUrl) =>
   blobUrl.replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/blob/", "/");
 
 async function fetchXlsxRows(blobUrl, sheetNameOrIndex = 0) {
-  const url = toRaw(blobUrl) + "?v=" + Date.now(); // cache-bust
+  const url = toRaw(blobUrl) + "?v=" + Date.now();
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Fetch failed: ${url}`);
   const ab = await res.arrayBuffer();
@@ -30,14 +27,10 @@ async function fetchXlsxRows(blobUrl, sheetNameOrIndex = 0) {
 }
 
 async function fetchCsv(blobUrl) {
-  const url = toRaw(blobUrl) + "?v=" + Date.now(); // cache-bust
+  const url = toRaw(blobUrl) + "?v=" + Date.now();
   const txt = await (await fetch(url)).text();
   return new Promise((resolve) => {
-    Papa.parse(txt, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => resolve(res.data),
-    });
+    Papa.parse(txt, { header: true, skipEmptyLines: true, complete: (r) => resolve(r.data) });
   });
 }
 
@@ -53,57 +46,57 @@ function excelToDate(val) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Date formatting
+// Formatting
 const DAY_ABBR = ["Sun","Mon","Tues","Wed","Thurs","Fri","Sat"];
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec"];
 function fmtDateOnly(dt) {
   return `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
 }
-function fmtTime(h, m) {
-  const d = new Date(); d.setHours(h, m, 0, 0);
+function fmtTimeHM(dateLike) {
+  const d = new Date();
+  if (typeof dateLike === "string") {
+    // parse "6:30pm - 8:30pm" -> keep as-is
+    return dateLike;
+  }
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
 }
-function fmtDateRange(dt, startH, startM, endH, endM) {
-  return `${fmtDateOnly(dt)} ${fmtTime(startH, startM)} to ${fmtTime(endH, endM)}`;
+function fmtRange(startH, startM, endH, endM) {
+  const d = new Date();
+  d.setHours(startH, startM, 0, 0);
+  const start = d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }).toLowerCase();
+  d.setHours(endH, endM, 0, 0);
+  const end = d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }).toLowerCase();
+  return `${start} to ${end}`;
 }
-
 function withinLastNDays(dt, n = 31) {
   const today = new Date();
-  const start = new Date();
-  start.setDate(today.getDate() - n);
+  const start = new Date(); start.setDate(today.getDate() - n);
   return dt >= start && dt <= today;
 }
 
-/***** WEEKLY PRACTICES (rolling next occurrences) *****/
-// Thursday 6:00pm–8:00pm (weekday=4), Sunday 8:40am–9:30am (weekday=0)
+/***** WEEKLY PRACTICES (rolling) *****/
 function nextWeeklyOccurrence(targetWeekday, startH, startM, endH, endM) {
   const now = new Date();
   const occ = new Date(now);
   const delta = (targetWeekday - now.getDay() + 7) % 7;
   occ.setDate(now.getDate() + delta);
   occ.setHours(startH, startM, 0, 0);
-  // if today and already past end time, push 7 days
   const end = new Date(occ); end.setHours(endH, endM, 0, 0);
-  if (now > end) { occ.setDate(occ.getDate() + 7); }
-  return occ;
+  if (now > end) occ.setDate(occ.getDate() + 7);
+  return { date: occ, startH, startM, endH, endM };
 }
-
 function renderWeeklyPractices() {
   const ul = document.getElementById("weekly-practice-list");
   if (!ul) return;
+  const thurs = nextWeeklyOccurrence(4, 18, 0, 20, 0); // Thurs 6–8pm
+  const sun   = nextWeeklyOccurrence(0, 8, 40, 9, 30); // Sun 8:40–9:30am
 
-  const thurs = nextWeeklyOccurrence(4, 18, 0, 20, 0);      // Thurs 6–8pm
-  const sun   = nextWeeklyOccurrence(0, 8, 40, 9, 30);      // Sun 8:40–9:30am
-
-  ul.innerHTML = "";
   const li1 = document.createElement("li");
-  li1.textContent = `${fmtDateRange(thurs, 18, 0, 20, 0)}`.replace(/^Thursdays?/, "Thurs");
+  li1.textContent = `${fmtDateOnly(thurs.date)} ${fmtRange(thurs.startH, thurs.startM, thurs.endH, thurs.endM)}`;
   const li2 = document.createElement("li");
-  li2.textContent = `${fmtDateRange(sun, 8, 40, 9, 30)}`.replace(/^Sundays?/, "Sun");
-  // Ensure abbreviations
-  li1.textContent = li1.textContent.replace(/^Thu,/, "Thurs,");
-  ul.appendChild(li1);
-  ul.appendChild(li2);
+  li2.textContent = `${fmtDateOnly(sun.date)} ${fmtRange(sun.startH, sun.startM, sun.endH, sun.endM)}`;
+
+  ul.innerHTML = ""; ul.appendChild(li1); ul.appendChild(li2);
 }
 
 /***** ADDITIONAL PRACTICE (non-Thu/Sun) *****/
@@ -118,14 +111,11 @@ async function renderAdditionalPractice() {
       const time = String(o.time ?? o["practice time"] ?? "").trim();
       const notes = String(o.notes ?? o.note ?? "").trim();
       return { date, time, notes };
-    }).filter(x => x.date && ![0,4].includes(x.date.getDay())) // exclude Sun(0) & Thu(4)
+    }).filter(x => x.date && ![0,4].includes(x.date.getDay())) // exclude Sun(0), Thu(4)
       .sort((a,b) => a.date - b.date);
 
     tbody.innerHTML = "";
-    if (!normalized.length) {
-      tbody.innerHTML = `<tr><td colspan="3">No additional practices listed.</td></tr>`;
-      return;
-    }
+    if (!normalized.length) { tbody.innerHTML = `<tr><td colspan="3">No additional practices listed.</td></tr>`; return; }
     normalized.forEach(({date,time,notes}) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${time || "-"}</td><td>${notes || ""}</td>`;
@@ -137,61 +127,7 @@ async function renderAdditionalPractice() {
   }
 }
 
-/***** ANNOUNCEMENTS (EN+HM, newest, 31d) *****/
-async function renderAnnouncements() {
-  const ul = document.getElementById("announcements-list");
-  if (!ul) return;
-  try {
-    const rows = await fetchXlsxRows(SRC.announcements);
-    const data = rows.map((r) => {
-      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
-      const date = excelToDate(o.date ?? o["announcement date"] ?? o.created ?? "");
-      const english = String(o.english ?? o.message ?? o.announcement ?? "").trim();
-      const hmong   = String(o.hmong ?? "").trim();
-      return { date, english, hmong };
-    }).filter(x => x.date && (x.english || x.hmong))
-      .filter(x => withinLastNDays(x.date, 31))
-      .sort((a,b) => b.date - a.date);
-
-    ul.innerHTML = "";
-    if (!data.length) { ul.innerHTML = `<li>No announcements in the last 31 days.</li>`; return; }
-    data.forEach(({date, english, hmong}) => {
-      const li = document.createElement("li");
-      let html = `<strong>${fmtDateOnly(date)}:</strong>`;
-      if (english) html += `<br><em>(English)</em> ${english}`;
-      if (hmong)   html += `<br><em>(Hmong)</em> ${hmong}`;
-      li.innerHTML = html;
-      ul.appendChild(li);
-    });
-  } catch (e) {
-    console.error("Announcements error:", e);
-    ul.innerHTML = `<li>Unable to load announcements.</li>`;
-  }
-}
-
-/***** BIBLE STUDY (generic table) *****/
-async function renderBibleStudy() {
-  const thead = document.getElementById("bible-study-head");
-  const tbody = document.getElementById("bible-study-body");
-  if (!thead || !tbody) return;
-  try {
-    const rows = await fetchXlsxRows(SRC.bibleStudy);
-    thead.innerHTML = ""; tbody.innerHTML = "";
-    if (!rows.length) { thead.innerHTML = "<tr><th>Info</th></tr>"; tbody.innerHTML = "<tr><td>No data</td></tr>"; return; }
-    const headers = Object.keys(rows[0]);
-    thead.innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = headers.map(h => `<td>${r[h]}</td>`).join("");
-      tbody.appendChild(tr);
-    });
-  } catch (e) {
-    console.error("Bible Study error:", e);
-    thead.innerHTML = "<tr><th>Error</th></tr>"; tbody.innerHTML = "<tr><td>Unable to load Bible Study.</td></tr>";
-  }
-}
-
-/***** MEMBERS (Name, Role) *****/
+/***** MEMBERS *****/
 async function renderMembers() {
   const tbody = document.getElementById("members-body");
   if (!tbody) return;
@@ -217,90 +153,111 @@ async function renderMembers() {
   }
 }
 
-/***** SETLIST (generic table) *****/
-async function renderSetlist() {
-  const thead = document.getElementById("setlist-head");
-  const tbody = document.getElementById("setlist-body");
-  if (!thead || !tbody) return;
+/***** ANNOUNCEMENTS (Date | English | Hmong; newest; 31 days) *****/
+async function renderAnnouncements() {
+  const tbody = document.getElementById("announcements-body");
+  if (!tbody) return;
   try {
-    const rows = await fetchXlsxRows(SRC.setlist);
-    thead.innerHTML = ""; tbody.innerHTML = "";
-    if (!rows.length) { thead.innerHTML = "<tr><th>Info</th></tr>"; tbody.innerHTML = "<tr><td>No data</td></tr>"; return; }
-    const headers = Object.keys(rows[0]);
-    thead.innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    rows.forEach(r => {
+    const rows = await fetchXlsxRows(SRC.announcements);
+    const data = rows.map((r) => {
+      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
+      const date = excelToDate(o.date ?? o["announcement date"] ?? "");
+      const english = String(o.announcement ?? o.english ?? o.message ?? "").trim();
+      const hmong   = String(o["lus tshaj tawm"] ?? o.hmong ?? "").trim();
+      return { date, english, hmong };
+    }).filter(x => x.date && (x.english || x.hmong))
+      .filter(x => withinLastNDays(x.date, 31))
+      .sort((a,b) => b.date - a.date);
+
+    tbody.innerHTML = "";
+    if (!data.length) { tbody.innerHTML = `<tr><td colspan="3">No announcements in the last 31 days.</td></tr>`; return; }
+    data.forEach(({date, english, hmong}) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = headers.map(h => `<td>${r[h]}</td>`).join("");
+      tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${english}</td><td>${hmong}</td>`;
       tbody.appendChild(tr);
     });
+  } catch (e) {
+    console.error("Announcements error:", e);
+    tbody.innerHTML = `<tr><td colspan="3">Unable to load announcements.</td></tr>`;
+  }
+}
+
+/***** SETLIST (split into upcoming vs last week) *****/
+function normalizeSetlistRow(r) {
+  const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
+  const date = excelToDate(o.date ?? o.day ?? o["service date"] ?? "");
+  const song = String(o.song ?? o.title ?? "").trim();
+  const col1 = String(o.column1 ?? o.category ?? "").trim();
+  const topic = String(o.topic ?? o.notes ?? "").trim();
+  return { date, song, col1, topic, raw: r };
+}
+async function renderSetlist() {
+  const upHead  = document.getElementById("setlist-up-head");
+  const upBody  = document.getElementById("setlist-up-body");
+  const lsHead  = document.getElementById("setlist-last-head");
+  const lsBody  = document.getElementById("setlist-last-body");
+  if (!upHead || !upBody || !lsHead || !lsBody) return;
+
+  try {
+    const rows = (await fetchXlsxRows(SRC.setlist)).map(normalizeSetlistRow).filter(x => x.date);
+
+    // Group by date (YYYY-MM-DD)
+    const byDate = new Map();
+    for (const r of rows) {
+      const key = r.date.toISOString().slice(0,10);
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(r);
+    }
+    const dates = Array.from(byDate.keys()).map(d => new Date(d)).sort((a,b)=>a-b);
+    const today = new Date();
+    const upcomingDate = dates.find(d => d >= new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+    const lastDate = [...dates].filter(d => d < today).pop();
+
+    function renderBlock(dateObj, headEl, bodyEl) {
+      headEl.innerHTML = `<tr><th>Date</th><th>Song</th><th>Column1</th><th>Topic</th></tr>`;
+      bodyEl.innerHTML = "";
+      if (!dateObj) { bodyEl.innerHTML = `<tr><td colspan="4">No data.</td></tr>`; return; }
+      const key = dateObj.toISOString().slice(0,10);
+      const list = byDate.get(key) || [];
+      if (!list.length) { bodyEl.innerHTML = `<tr><td colspan="4">No songs for this date.</td></tr>`; return; }
+      list.forEach(({date, song, col1, topic}) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${song}</td><td>${col1}</td><td>${topic}</td>`;
+        bodyEl.appendChild(tr);
+      });
+    }
+
+    renderBlock(upcomingDate, upHead, upBody);
+    renderBlock(lastDate, lsHead, lsBody);
   } catch (e) {
     console.error("Setlist error:", e);
-    thead.innerHTML = "<tr><th>Error</th></tr>"; tbody.innerHTML = "<tr><td>Unable to load Setlist.</td></tr>";
+    upHead.innerHTML = "<tr><th>Error</th></tr>";
+    upBody.innerHTML = "<tr><td>Unable to load setlist.</td></tr>";
+    lsHead.innerHTML = "<tr><th>Error</th></tr>";
+    lsBody.innerHTML = "<tr><td>Unable to load setlist.</td></tr>";
   }
 }
 
-/***** SONGS CATALOG (CSV table) *****/
-async function renderCatalog() {
-  const thead = document.getElementById("catalog-head");
-  const tbody = document.getElementById("catalog-body");
-  if (!thead || !tbody) return;
-  try {
-    const rows = await fetchCsv(SRC.catalog);
-    thead.innerHTML = ""; tbody.innerHTML = "";
-    if (!rows.length) { thead.innerHTML = "<tr><th>Info</th></tr>"; tbody.innerHTML = "<tr><td>No data</td></tr>"; return; }
-    const headers = Object.keys(rows[0]);
-    thead.innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = headers.map(h => `<td>${r[h]}</td>`).join("");
-      tbody.appendChild(tr);
-    });
-  } catch (e) {
-    console.error("Catalog error:", e);
-    thead.innerHTML = "<tr><th>Error</th></tr>"; tbody.innerHTML = "<tr><td>Unable to load Songs Catalog.</td></tr>";
-  }
+/***** ANALYTICS ******/
+function loadGoogle() {
+  return new Promise((resolve) => { google.charts.load("current", { packages: ["corechart"] }); google.charts.setOnLoadCallback(resolve); });
 }
 
-/***** ANALYTICS *****/
-// 1) Hymnal Coverage KPI
-async function renderKpiCoverage() {
-  const valEl = document.getElementById("kpi-coverage");
-  const subEl = document.getElementById("kpi-coverage-sub");
-  if (!valEl || !subEl) return;
-  try {
-    const rows = await fetchCsv(SRC.kpiCoverage);
-    // Expecting columns like: total_hymns, used_hymns, coverage_pct
-    if (!rows.length) { valEl.textContent = "—"; subEl.textContent = "No data"; return; }
-    const r = rows[0];
-    const pct = Number(r.coverage_pct ?? r.coverage ?? r.pct ?? 0);
-    const used = r.used_hymns ?? r.used ?? "—";
-    const total = r.total_hymns ?? r.total ?? "—";
-    valEl.textContent = isFinite(pct) ? `${pct}%` : `${pct}`;
-    subEl.textContent = `Used ${used} of ${total}`;
-  } catch (e) {
-    console.error("Coverage KPI error:", e);
-    valEl.textContent = "—";
-    subEl.textContent = "Unable to load";
-  }
-}
-
-// 2) Top 10 (3D pie)
+// Top 10 (3D pie)
 async function renderTop10Pie() {
   const el = document.getElementById("chart-top10");
   if (!el) return;
   try {
     const rows = await fetchCsv(SRC.kpiTop10);
-    // Expect columns: Song, Plays (or similar)
     const headers = rows.length ? Object.keys(rows[0]) : [];
     const nameKey = headers.find(h => /song|title/i.test(h)) || "Song";
-    const valKey  = headers.find(h => /play|count|times/i.test(h)) || "Plays";
+    const valKey  = headers.find(h => /play|count|times|value/i.test(h)) || "Plays";
     const dataArr = [["Song", "Plays"]];
     rows.forEach(r => {
       const name = String(r[nameKey] ?? "").trim();
-      const val = Number(r[valKey] ?? 0);
+      const val = Number((r[valKey] ?? "0").toString().replace(/,/g,""));
       if (name && isFinite(val)) dataArr.push([name, val]);
     });
-
     const data = google.visualization.arrayToDataTable(dataArr);
     const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
     const chart = new google.visualization.PieChart(el);
@@ -311,84 +268,66 @@ async function renderTop10Pie() {
   }
 }
 
-// 3) KPI by Source (bar)
-async function renderBySourceBar() {
-  const el = document.getElementById("chart-by-source");
-  if (!el) return;
+// Played vs Not Played ratio
+async function renderPlayedRatio() {
+  const kpiVal = document.getElementById("kpi-played-ratio");
+  const kpiSub = document.getElementById("kpi-played-sub");
+  const el = document.getElementById("chart-played-ratio");
+  if (!kpiVal || !kpiSub || !el) return;
+
   try {
-    const rows = await fetchCsv(SRC.kpiBySource);
-    // Expect columns: Source, Count
-    const headers = rows.length ? Object.keys(rows[0]) : [];
-    const srcKey = headers.find(h => /source|category/i.test(h)) || "Source";
-    const valKey = headers.find(h => /count|plays|value/i.test(h)) || "Count";
-    const dataArr = [[srcKey, valKey]];
-    rows.forEach(r => {
-      const k = String(r[srcKey] ?? "").trim();
-      const v = Number(r[valKey] ?? 0);
-      if (k && isFinite(v)) dataArr.push([k, v]);
+    const [catalogRows, setlistRows] = await Promise.all([fetchCsv(SRC.catalog), fetchXlsxRows(SRC.setlist)]);
+    const totalSongs = new Set();
+    const headers = catalogRows.length ? Object.keys(catalogRows[0]) : [];
+    const titleKey = headers.find(h => /song|title/i.test(h)) || "song";
+    catalogRows.forEach(r => { const t = String(r[titleKey] ?? "").trim().toLowerCase(); if (t) totalSongs.add(t); });
+
+    const played = new Set();
+    setlistRows.forEach(r => {
+      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
+      const t = String(o.song ?? o.title ?? "").trim().toLowerCase();
+      if (t) played.add(t);
     });
 
-    const data = google.visualization.arrayToDataTable(dataArr);
-    const options = {
-      backgroundColor: "transparent",
-      legend: { position: "none" },
-      hAxis: { textStyle: { color: "#e5e7eb" }, gridlines: { color: "#1f2937" } },
-      vAxis: { textStyle: { color: "#e5e7eb" }, gridlines: { color: "#1f2937" }, minValue: 0 },
-      chartArea: { width: "85%", height: "70%" },
-    };
-    const chart = new google.visualization.ColumnChart(el);
+    const playedCount = played.size;
+    const catalogCount = totalSongs.size || playedCount; // fallback
+    const notPlayed = Math.max(catalogCount - playedCount, 0);
+    const pct = catalogCount ? Math.round((playedCount / catalogCount) * 100) : 0;
+
+    kpiVal.textContent = `${pct}%`;
+    kpiSub.textContent = `Played ${playedCount} of ${catalogCount}`;
+
+    await loadGoogle();
+    const data = google.visualization.arrayToDataTable([
+      ["Type","Count"],
+      ["Played", playedCount],
+      ["Not Played", notPlayed],
+    ]);
+    const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
+    const chart = new google.visualization.PieChart(el);
     chart.draw(data, options);
   } catch (e) {
-    console.error("BySource Bar error:", e);
-    el.innerHTML = "Unable to render KPI by Source.";
-  }
-}
-
-// 4) Unused Hymnal table
-async function renderUnusedTable() {
-  const thead = document.getElementById("unused-head");
-  const tbody = document.getElementById("unused-body");
-  if (!thead || !tbody) return;
-  try {
-    const rows = await fetchCsv(SRC.hymnalUnused);
-    thead.innerHTML = ""; tbody.innerHTML = "";
-    if (!rows.length) { thead.innerHTML = "<tr><th>Info</th></tr>"; tbody.innerHTML = "<tr><td>No data</td></tr>"; return; }
-    const headers = Object.keys(rows[0]);
-    thead.innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    rows.forEach(r => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = headers.map(h => `<td>${r[h]}</td>`).join("");
-      tbody.appendChild(tr);
-    });
-  } catch (e) {
-    console.error("Unused Hymnal error:", e);
-    thead.innerHTML = "<tr><th>Error</th></tr>"; tbody.innerHTML = "<tr><td>Unable to load Unused Hymnal.</td></tr>";
+    console.error("Played Ratio error:", e);
+    kpiVal.textContent = "—";
+    kpiSub.textContent = "Unable to compute";
+    el.innerHTML = "Unable to render Played/Not Played.";
   }
 }
 
 /***** INIT *****/
-function loadGoogle() {
-  return new Promise((resolve) => {
-    google.charts.load("current", { packages: ["corechart"] });
-    google.charts.setOnLoadCallback(resolve);
-  });
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     renderWeeklyPractices();
     await Promise.all([
       renderAdditionalPractice(),
-      renderAnnouncements(),
-      renderBibleStudy(),
       renderMembers(),
-      renderSetlist(),
-      renderCatalog(),
-      renderKpiCoverage(),
-      renderUnusedTable()
+      renderAnnouncements(),
+      renderSetlist()
     ]);
-    await loadGoogle();
-    await Promise.all([renderTop10Pie(), renderBySourceBar()]);
+    await Promise.all([
+      renderTop10Pie(),
+      renderPlayedRatio()
+    ]);
   } catch (e) {
     console.error("Init error:", e);
   }
