@@ -1,10 +1,10 @@
-// ======= Config: Excel sources on GitHub =======
+// ===== GitHub Excel sources =====
 const ANNOUNCEMENTS_XLSX =
   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/announcements/announcements.xlsx";
 const SPECIAL_PRACTICE_XLSX =
   "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/special_practice/special_practice.xlsx";
 
-// ======= Helpers =======
+// ===== Helpers =====
 const toRawGitHub = (blobUrl) =>
   blobUrl.replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/blob/", "/");
 
@@ -26,7 +26,6 @@ function excelToDate(val) {
   if (typeof val === "number") {
     const d = XLSX.SSF.parse_date_code(val);
     if (!d) return null;
-    // local time to avoid GMT strings
     return new Date(d.y, d.m - 1, d.d, d.H || 0, d.M || 0, d.S || 0);
   }
   const d = new Date(val);
@@ -46,10 +45,10 @@ function withinLastNDays(dt, n = 31) {
   return dt >= start && dt <= today;
 }
 
-// ======= 1) Worship Practice: strip label words only =======
+// ===== 1) Worship Practice: remove leading labels only =====
 function sanitizeWorshipPracticeLabels() {
   const list = document.getElementById("worship-practice-list");
-  if (!list) return;
+  if (!list) return; // not on this page; do nothing
   [...list.querySelectorAll("li")].forEach((li) => {
     const cleaned = li.textContent.trim().replace(
       /^\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+practice\s*:\s*/i,
@@ -59,10 +58,10 @@ function sanitizeWorshipPracticeLabels() {
   });
 }
 
-// ======= 2) Special Practice (Date, Time, Notes) =======
+// ===== 2) Special Practice (Date, Time, Notes) =====
 async function renderSpecialPractice() {
   const tbody = document.getElementById("special-practice-body");
-  if (!tbody) return;
+  if (!tbody) return; // section not on this page
 
   try {
     const rows = await fetchSheetJSON(SPECIAL_PRACTICE_XLSX);
@@ -96,10 +95,10 @@ async function renderSpecialPractice() {
   }
 }
 
-// ======= 3) Announcements (English + Hmong; newest first; last 31 days) =======
+// ===== 3) Announcements (English + Hmong; newest first; last 31 days) =====
 async function renderAnnouncements() {
   const list = document.getElementById("announcements-list");
-  if (!list) return;
+  if (!list) return; // not on this page
 
   try {
     const rows = await fetchSheetJSON(ANNOUNCEMENTS_XLSX);
@@ -139,7 +138,7 @@ async function renderAnnouncements() {
   }
 }
 
-// ======= Init =======
+// ===== Init =====
 document.addEventListener("DOMContentLoaded", () => {
   sanitizeWorshipPracticeLabels();
   renderSpecialPractice();
