@@ -1,7 +1,8 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   - Top 10 list (excludes NA / N/A / N.A. / None / contains "Church Close")
-   - 3D pie on the right (Google Charts)
+   - Top 10 only (excludes NA / N.A. / N/A / None / contains "Church Close")
+   - 3D pie under Song Analytics
+   - Coming Up & Previous Set side-by-side
 ========================= */
 
 /* ---------- CONFIG ---------- */
@@ -14,7 +15,7 @@ const PATHS = {
   special: "special_practice/special_practice.xlsx"
 };
 
-// Worship Practice: show the next occurrence of Thu/Sun
+// Worship Practice (show next Thu/Sun)
 const PRACTICE = {
   thursday: { dow: 4, time: "6:00pm–8:00pm" },
   sunday:   { dow: 0, time: "8:40am–9:30am" }
@@ -107,7 +108,7 @@ function findFirst(headers, candidates){
   return -1;
 }
 
-/* ---------- EXCLUSION RULES FOR ANALYTICS ---------- */
+/* ---------- EXCLUSION RULES (analytics) ---------- */
 function isExcludedSong(song){
   const s = String(song || "").trim().toLowerCase();
   if (!s) return true;
@@ -116,53 +117,63 @@ function isExcludedSong(song){
   return false;
 }
 
-/* ---------- LAYOUT: create a two-column analytics row; put 3D pie on right ---------- */
-function placePieRight(){
-  // Remove any old canvas-based pie if it exists (Chart.js)
-  document.querySelectorAll("#pieChart, canvas#pieChart").forEach(n => n.closest(".chart-card") ? n.closest(".chart-card").remove() : n.remove());
-  const oldChartsRow = document.querySelector(".charts-2");
-  if (oldChartsRow) oldChartsRow.remove();
+/* ---------- LAYOUT HELPERS ---------- */
+// Build a 2-column grid for Coming Up / Previous set
+function ensureSetlistsGrid(){
+  if (document.getElementById("setlists-grid")) return;
 
-  // Find the block that contains the Top list (#top5)
-  const listEl = document.getElementById("top5");
-  if (!listEl) return;
+  // Find existing single-column cards (best-effort)
+  const nextCard = $("#setlist-next")?.closest(".card") || $("#setlist-next")?.parentElement;
+  const prevCard = $("#setlist-prev")?.closest(".card") || $("#setlist-prev")?.parentElement;
+  const parent = (nextCard && nextCard.parentElement) || document.body;
 
-  const listBlock = listEl.closest("div") || listEl.parentElement;
-  const parent = listBlock.parentElement;
+  // Hide old single-column blocks if they exist
+  if (nextCard) nextCard.style.display = "none";
+  if (prevCard) prevCard.style.display = "none";
 
-  // If we already built it, just ensure the right slot exists
-  if (document.getElementById("analytics-two-col")) {
-    if (!document.getElementById("pieChart3D")) {
-      const right = document.getElementById("analytics-right");
-      if (right) right.innerHTML = `<h3 class="subhead">Plays by Song (3D Pie)</h3><div class="chart-card"><div id="pieChart3D" style="width:100%;height:320px;"></div></div>`;
-    }
-    return;
-  }
-
-  // Build a responsive two-column grid
+  // Create grid
   const grid = document.createElement("div");
-  grid.id = "analytics-two-col";
-  grid.style.cssText = "display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1fr);gap:16px;align-items:start;";
+  grid.id = "setlists-grid";
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start;margin-top:8px;";
 
-  // Left column: move existing list block
-  const leftCol = document.createElement("div");
-  leftCol.id = "analytics-left";
-  leftCol.appendChild(listBlock);
-
-  // Right column: 3D pie container
-  const rightCol = document.createElement("div");
-  rightCol.id = "analytics-right";
-  rightCol.innerHTML = `<h3 class="subhead">Plays by Song (3D Pie)</h3>
-                        <div class="chart-card"><div id="pieChart3D" style="width:100%;height:320px;"></div></div>`;
-
-  grid.appendChild(leftCol);
-  grid.appendChild(rightCol);
-
-  // Insert grid back where the list block originally was
+  // Two empty cards we will populate from data
+  grid.innerHTML = `
+    <div id="set-card-up" class="card">
+      <h3 class="subhead">Coming Up Set</h3>
+      <div class="dim" id="set-up-meta">—</div>
+      <div id="set-up-table"></div>
+    </div>
+    <div id="set-card-prev" class="card">
+      <h3 class="subhead">Previous Set</h3>
+      <div class="dim" id="set-prev-meta">—</div>
+      <div id="set-prev-table"></div>
+    </div>
+  `;
   parent.appendChild(grid);
 }
 
-/* ---------- Google Charts loader (for 3D pie) ---------- */
+// Put 3D pie **under** Song Analytics (below the Top 10 list)
+function ensurePieUnderAnalytics(){
+  // Remove any old charts row/canvas pies
+  document.querySelectorAll(".charts-2, #pieChart, canvas#pieChart").forEach(n => n.remove());
+
+  // Remove previous Google pie container if we’re re-rendering
+  const old = document.getElementById("pieChart3D");
+  if (old) old.closest(".chart-card").parentElement.remove();
+
+  const listEl = document.getElementById("top5");
+  if (!listEl) return;
+  const host = listEl.closest("div") || listEl.parentElement;
+
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `
+    <h3 class="subhead" style="margin-top:12px;">Plays by Song (3D Pie)</h3>
+    <div class="chart-card"><div id="pieChart3D" style="width:100%;height:320px;"></div></div>
+  `;
+  host.appendChild(wrap);
+}
+
+/* ---------- Google Charts loader (3D pie) ---------- */
 let gchartsLoaded = false, gchartsLoading = null;
 function loadGoogleCharts(){
   if (gchartsLoaded) return Promise.resolve();
@@ -251,7 +262,7 @@ async function loadSpecialPractice(){
   }
 }
 
-/* ---------- ANNOUNCEMENTS (supports bilingual two-column sheet) ---------- */
+/* ---------- ANNOUNCEMENTS (bilingual if two columns) ---------- */
 async function loadAnnouncements(){
   try{
     const wb = await fetchWB(PATHS.announcements);
@@ -285,7 +296,7 @@ async function loadAnnouncements(){
       return;
     }
 
-    // Fallback: render whole sheet, formatting Date if present
+    // Fallback: render whole sheet, format Date if present
     const out2 = idxDate === -1 ? aoa : aoa.map((r,i)=>{
       if(i===0) return r;
       const rr = r.slice();
@@ -312,7 +323,7 @@ async function loadMembers(){
   }
 }
 
-/* ---------- WEEKLY BIBLE VERSES (last 4 weeks) ---------- */
+/* ---------- WEEKLY BIBLE VERSES (last 4 weeks back) ---------- */
 async function loadBibleVerses(){
   try{
     const wb = await fetchWB(PATHS.bible);
@@ -407,11 +418,16 @@ async function loadSetlistsAndAnalytics(){
     const next = dated.find(g => g.date > today) || null;
     const prev = [...dated].filter(g => g.date <= today).slice(-1)[0] || null;
 
+    // Populate original stacked sections (so you still have those ids)
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    // --- Analytics (Songs only) ---
-    // Build song counts with exclusions
+    // Build side-by-side cards
+    ensureSetlistsGrid();
+    renderSetlistCard(next, "#set-up-meta", "#set-up-table");
+    renderSetlistCard(prev, "#set-prev-meta", "#set-prev-table");
+
+    // --- Analytics (Top 10, Exclusions) ---
     const counts = new Map();
     if(idxSong !== -1){
       for(const r of rows){
@@ -422,7 +438,6 @@ async function loadSetlistsAndAnalytics(){
     }
     const songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
 
-    // Left list: Top 10 songs
     const leftHeader = $("#top5")?.previousElementSibling;
     if(leftHeader) leftHeader.textContent = "Top 10 – Most Played";
 
@@ -431,8 +446,8 @@ async function loadSetlistsAndAnalytics(){
       ? top10.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
       : `<li class="dim">No data</li>`;
 
-    // Layout: ensure 3D pie is on the right and draw it
-    placePieRight();
+    // Ensure the 3D pie lives **under** Song Analytics, then draw it
+    ensurePieUnderAnalytics();
     await drawSongsPie3D(songCounts.slice(0,7)); // top 7 slices for readability
   }catch(e){
     console.error(e);
@@ -461,7 +476,45 @@ function renderSetlistGroup(group, metaSel, tableSel){
   html += `</tbody></table>`;
   $(tableSel).innerHTML = html;
 
-  // Song story toggles (Wikipedia)
+  // Story toggles (Wikipedia summary)
+  $(tableSel).querySelectorAll(".story-btn").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const box = document.getElementById(btn.getAttribute("data-target"));
+      const song = btn.getAttribute("data-song");
+      if(box.style.display==="none"){
+        box.style.display = "block";
+        box.innerHTML = `<span class="dim">Fetching story…</span>`;
+        const text = await fetchSongStory(song);
+        box.innerHTML = text ? escapeHtml(text) : `<span class="dim">No summary found.</span>`;
+      }else{
+        box.style.display = "none";
+      }
+    });
+  });
+}
+
+// Same output as renderSetlistGroup, but into the side-by-side cards
+function renderSetlistCard(group, metaSel, tableSel){
+  if(!group){ $(metaSel).textContent = "—"; $(tableSel).innerHTML = `<p class="dim">No data.</p>`; return; }
+  $(metaSel).textContent =
+    `${group.date ? "Service Date: " + fmtDate(group.date) + " · " : ""}` +
+    `${group.sermon ? "Sermon: " + group.sermon : "Sermon: —"}`;
+
+  const header = ["Song"];
+  let html = `<table><thead><tr>${header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>`;
+  group.rows.forEach((row, i)=>{
+    const id = `${tableSel.replace("#","")}-story-${i}`;
+    html += `<tr>
+      <td>${escapeHtml(row.song)}
+        <span class="story-btn" style="margin-left:8px" data-song="${escapeHtml(row.song)}" data-target="${id}">Story</span>
+        <div id="${id}" class="story" style="display:none;"></div>
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  $(tableSel).innerHTML = html;
+
+  // Story toggles
   $(tableSel).querySelectorAll(".story-btn").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       const box = document.getElementById(btn.getAttribute("data-target"));
@@ -536,8 +589,9 @@ async function drawSongsPie3D(entries){
 
 /* ---------- BOOT ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  // Build the analytics layout up front so the pie always lives on the right
-  placePieRight();
+  // Layout scaffolding
+  ensureSetlistsGrid();
+  ensurePieUnderAnalytics();
 
   loadPractice();
   try{ await loadMembers(); }catch{}
