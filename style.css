@@ -19,7 +19,7 @@ html, body{
 .container{ max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
 
 .page-header{ margin-bottom: 1rem; }
-.page-header h1{ margin:0 0 .25rem 0; font-size: 1.6rem; }
+.header-left h1{ margin:0 0 .25rem 0; font-size: 1.6rem; }
 .muted{ color: var(--muted); }
 
 .card{
@@ -32,7 +32,7 @@ html, body{
 }
 
 h2{ margin: 0 0 .75rem 0; font-size: 1.25rem; }
-h3{ margin: .25rem 0 .75rem; font-size: 1.05rem; color: var(--accent); }
+h3{ margin: .25rem 0 .5rem; font-size: 1.05rem; color: var(--accent); }
 
 .bullets{ padding-left: 1.25rem; margin: .25rem 0 .25rem; }
 .bullets li{ margin: .35rem 0; }
@@ -56,6 +56,24 @@ h3{ margin: .25rem 0 .75rem; font-size: 1.05rem; color: var(--accent); }
   .grid-2{ grid-template-columns: 1fr 1fr; }
 }
 
+/* Members layout */
+.members-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.members-left .members-block + .members-block{ margin-top: .75rem; }
+
+.plain-list{
+  list-style: disc inside;
+  margin: 0;
+  padding-left: .5rem;
+}
+.plain-list li{
+  margin: .25rem 0;
+}
+
+/* Charts */
 .charts{
   display:grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -69,3 +87,13 @@ h3{ margin: .25rem 0 .75rem; font-size: 1.05rem; color: var(--accent); }
   padding:1rem;
 }
 .chart-area{ width:100%; height:300px; }
+.chart-area-lg{ height:420px; }
+
+/* Colored dot for rows that match pie colors */
+.dot{
+  display:inline-block;
+  width:10px; height:10px;
+  border-radius:50%;
+  margin-right:.5rem;
+  vertical-align:middle;
+}

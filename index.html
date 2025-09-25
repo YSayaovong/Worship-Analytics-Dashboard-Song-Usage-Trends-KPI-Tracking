@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HFBC – Praise and Worship</title>
 
-  <link rel="stylesheet" href="style.css?v=2025-09-26b" />
+  <link rel="stylesheet" href="style.css?v=2025-09-27f" />
 
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
@@ -13,26 +13,35 @@
   <script src="https://www.gstatic.com/charts/loader.js"></script>
 
   <!-- App -->
-  <script src="script.js?v=2025-09-26b" defer></script>
+  <script src="script.js?v=2025-09-27f" defer></script>
 </head>
 <body>
   <main class="container">
     <header class="page-header">
-      <h1>HFBC – Praise and Worship</h1>
-      <p class="muted">Live updates from GitHub spreadsheets and CSVs.</p>
+      <div class="header-left">
+        <h1>HFBC – Praise and Worship</h1>
+        <p class="muted">Live updates from GitHub spreadsheets and CSVs.</p>
+      </div>
     </header>
 
-    <!-- Two-column layout -->
+    <!-- Top grid: left (practice), right (members + training) -->
     <div class="grid-2">
       <div class="col">
-        <!-- Weekly Practices -->
+        <!-- Weekly Practices (now a Date/Time table) -->
         <section class="card">
           <h2>Weekly Practices</h2>
-          <ul id="weekly-practice-list" class="bullets"></ul>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Date</th><th>Time</th></tr>
+              </thead>
+              <tbody id="weekly-practice-body"></tbody>
+            </table>
+          </div>
           <p class="muted">Next upcoming Thursday and Sunday sessions are shown.</p>
         </section>
 
-        <!-- Additional Practice (non-Thu/Sun) -->
+        <!-- Additional Practice -->
         <section class="card">
           <h2>Additional Practice</h2>
           <div class="table-wrap">
@@ -47,13 +56,41 @@
       </div>
 
       <div class="col">
-        <!-- Members -->
+        <!-- Members (three-category layout) -->
         <section class="card">
           <h2>Worship Team Members</h2>
+
+          <div class="members-grid">
+            <div class="members-left">
+              <div class="members-block">
+                <h3>Worship Leader</h3>
+                <ul id="leader-list" class="plain-list"></ul>
+              </div>
+
+              <div class="members-block">
+                <h3>Musician</h3>
+                <ul id="musician-list" class="plain-list"></ul>
+              </div>
+            </div>
+
+            <div class="members-right">
+              <div class="members-block">
+                <h3>Singers</h3>
+                <ul id="singers-list" class="plain-list"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Training -->
+        <section class="card">
+          <h2>Training</h2>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Name</th><th>Role</th></tr></thead>
-              <tbody id="members-body"></tbody>
+              <thead>
+                <tr><th>Date</th><th>Time</th><th>Passage</th><th>Bible Verse</th></tr>
+              </thead>
+              <tbody id="training-body"></tbody>
             </table>
           </div>
         </section>
@@ -74,7 +111,21 @@
       <p class="muted">Newest first; items auto-hide after 31 days from the sheet date.</p>
     </section>
 
-    <!-- Setlist (upcoming vs last week) -->
+    <!-- Bible Study Log (last 4 weeks) -->
+    <section class="card">
+      <h2>Bible Study Log</h2>
+      <div class="table-wrap">
+        <table class="table" id="bibleStudyTable">
+          <thead>
+            <tr><th>Date</th><th>Topic / Passage</th><th>Bible Verse</th></tr>
+          </thead>
+          <tbody id="bible-study-body"></tbody>
+        </table>
+      </div>
+      <p class="muted">Shows current week and previous 3 weeks. Future sessions appear automatically when their week arrives.</p>
+    </section>
+
+    <!-- Setlist (between Bible Study and Analytics) -->
     <section class="card">
       <h2>Setlist</h2>
       <div class="grid-2">
@@ -97,38 +148,26 @@
           </div>
         </div>
       </div>
+      <p class="muted">Auto-rolls each Sunday at 12:30 pm.</p>
     </section>
 
-    <!-- Song Analytics -->
+    <!-- Song Analytics (last 52 weeks) -->
     <section class="card">
       <h2>Song Analytics</h2>
       <div class="charts">
         <div class="chart-card">
-          <h3>Top 10 Played Songs (3D Pie)</h3>
-          <div id="chart-top10-played" class="chart-area"></div>
+          <h3>Top 10 Played Songs (3D Pie) — Last 52 Weeks</h3>
+          <div id="chart-top10-played" class="chart-area chart-area-lg"></div>
         </div>
         <div class="chart-card">
-          <h3>Top 10 Songs This Year — Plays</h3>
+          <h3>Top Songs — Plays (Last 52 Weeks)</h3>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Song</th><th>Times Played (This Year)</th></tr></thead>
-              <tbody id="table-top10-year"></tbody>
+              <thead><tr><th>Song</th><th>Times Played</th></tr></thead>
+              <tbody id="table-top10-window"></tbody>
             </table>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Bible Study Log -->
-    <section class="card">
-      <h2>Bible Study Log</h2>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr><th>Date</th><th>Topic / Passage</th><th>Bible Verse</th></tr>
-          </thead>
-          <tbody id="bible-study-body"></tbody>
-        </table>
       </div>
     </section>
   </main>
