@@ -1,8 +1,6 @@
 /* =========================
    HFBC Praise & Worship — FULL script.js
-   - Right chart: New vs Repeat Songs (last 12 weeks) pie
-   - Right list: "New Songs (Last 12 Weeks)"
-   - All dates include weekday (e.g., "Sunday, Sep 28, 2025")
+   (Single pie only: Plays by Song)
 ========================= */
 
 /* ---------- CONFIG ---------- */
@@ -11,11 +9,11 @@ const PATHS = {
   announcements: "announcements/announcements.xlsx",
   members: "members/members.xlsx",
   setlist: "setlist/setlist.xlsx",
-  bible: "bible_study/bible_study.xlsx",            // Weekly Bible Verses (last 4 weeks)
-  special: "special_practice/special_practice.xlsx" // Special Practice (DATE | SPECIAL PRACTICE)
+  bible: "bible_study/bible_study.xlsx",
+  special: "special_practice/special_practice.xlsx"
 };
 
-// Worship Practice (static times; roll forward every Thu/Sun at local 12:00 AM)
+// Worship Practice (roll forward every Thu/Sun at local 12:00 AM)
 const PRACTICE = {
   thursday: { dow: 4, time: "6:00pm–8:00pm" },
   sunday:   { dow: 0, time: "8:40am–9:30am" }
@@ -24,7 +22,7 @@ const PRACTICE = {
 /* ---------- UTIL ---------- */
 const $ = (sel, root=document) => root.querySelector(sel);
 
-// Include weekday in all dates: "Sunday, Sep 28, 2025"
+// Dates include weekday: "Sunday, Sep 28, 2025"
 const fmtDate = d =>
   d ? d.toLocaleDateString(undefined, {
         weekday: "long", month: "short", day: "numeric", year: "numeric"
@@ -96,12 +94,10 @@ function renderAOATable(aoa, targetSel){
   html += `</tbody></table>`;
   el.innerHTML = html;
 }
-
 const safeLabel = (s) => {
   const v = String(s ?? "").trim();
   return v || "Unknown";
 };
-
 function findFirst(headers, candidates){
   for(const c of candidates){
     const i = headers.indexOf(c);
@@ -129,7 +125,7 @@ function loadPractice(){
   renderAOATable(rows, "#reminders-table");
 }
 
-/* ---------- SPECIAL PRACTICE (special_practice.xlsx) ---------- */
+/* ---------- SPECIAL PRACTICE (future-only) ---------- */
 async function loadSpecialPractice(){
   try{
     const wb = await fetchWB(PATHS.special);
@@ -305,7 +301,7 @@ async function loadSetlistsAndAnalytics(){
     const hdrRaw = aoa[0].map(h=>String(h));
     const hdr = hdrRaw.map(h=>h.trim().toLowerCase());
     const idxDate   = findFirst(hdr, ["date","service date"]);
-    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]); // (unused now, but harmless)
+    const idxSermon = findFirst(hdr, ["sermon","sermon topic","topic"]);
     const idxSong   = findFirst(hdr, ["song","title","song title"]);
 
     const rows = aoa.slice(1).filter(r => r && r.some(c => String(c).trim()!==""));
@@ -337,11 +333,7 @@ async function loadSetlistsAndAnalytics(){
     renderSetlistGroup(next, "#setlist-next-meta", "#setlist-next");
     renderSetlistGroup(prev, "#setlist-prev-meta", "#setlist-prev");
 
-    /* -------- Analytics --------
-       Left pie + Top 5 list: SONG COUNTS (per row, all time)
-       Right pie + Right list: NEW vs REPEAT (last 12 weeks)
-    -------------------------------- */
-    // SONG COUNTS
+    // --- Analytics (Songs only) ---
     let songCounts = [];
     if(idxSong !== -1){
       const counts = new Map();
@@ -352,68 +344,26 @@ async function loadSetlistsAndAnalytics(){
       songCounts = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
     }
 
-    // Build first-use date per song
-    const firstUse = new Map(); // song -> first Date
-    if(idxSong !== -1 && idxDate !== -1){
-      for(const r of rows){
-        const s = String(r[idxSong] ?? "").trim();
-        const d = toLocalDate(r[idxDate]);
-        if(!s || !d) continue;
-        if(!firstUse.has(s) || firstUse.get(s) > d) firstUse.set(s, d);
-      }
-    }
-
-    // Last 12 weeks window
-    const windowEnd = today;
-    const windowStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 84); // 12*7 days
-
-    // Unique songs scheduled in the window
-    const songsInWindow = new Set();
-    if(idxSong !== -1 && idxDate !== -1){
-      for(const r of rows){
-        const s = String(r[idxSong] ?? "").trim();
-        const d = toLocalDate(r[idxDate]);
-        if(!s || !d) continue;
-        if(d >= windowStart && d <= windowEnd){
-          songsInWindow.add(s);
-        }
-      }
-    }
-
-    // Count new vs repeat and prepare "new songs" list
-    let newCount = 0, repeatCount = 0;
-    const newSongsList = []; // {song, firstDate}
-    for(const s of songsInWindow){
-      const first = firstUse.get(s);
-      if(first && first >= windowStart){
-        newCount++;
-        newSongsList.push({ song: s, first });
-      }else{
-        repeatCount++;
-      }
-    }
-    newSongsList.sort((a,b)=> b.first - a.first);
-
-    // Lists
-    const top5Songs = songCounts.slice(0,5);
-    $("#top5").innerHTML = top5Songs.length
-      ? top5Songs.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
+    // Left list: Top 5 songs
+    const top5 = songCounts.slice(0,5);
+    $("#top5").innerHTML = top5.length
+      ? top5.map(([s,c])=>`<li>${escapeHtml(safeLabel(s))} — ${c}</li>`).join("")
       : `<li class="dim">No data</li>`;
 
-    const rightHeader = $("#bottom5")?.previousElementSibling;
-    if(rightHeader) rightHeader.textContent = "New Songs (Last 12 Weeks)";
-    $("#bottom5").innerHTML = newSongsList.length
-      ? newSongsList.slice(0,5).map(x=>`<li>${escapeHtml(safeLabel(x.song))} — ${fmtDate(x.first)}</li>`).join("")
-      : `<li class="dim">No new songs in the last 12 weeks.</li>`;
+    // Hide the right-hand list (if present)
+    hideRightList();
 
-    // Charts
-    drawSongsPie(songCounts.slice(0,7));               // left: songs
-    drawNewRepeatPie(newCount, repeatCount);           // right: new vs repeat
-    updateSecondChartTitle("New vs Repeat (Last 12 Weeks)");
+    // Chart: only left pie
+    drawSongsPie(songCounts.slice(0,7));
+
+    // Hide the right-hand chart card (if present)
+    hideRightChart();
   }catch(e){
     console.error(e);
     $("#setlist-next").innerHTML = `<p class="dim">Unable to load <code>${PATHS.setlist}</code>.</p>`;
     $("#setlist-prev").innerHTML = `<p class="dim">—</p>`;
+    hideRightList();
+    hideRightChart();
   }
 }
 
@@ -482,8 +432,8 @@ async function wikipediaOpenSearch(q){
   return j?.[1]?.[0] || "";
 }
 
-/* ---------- Charts ---------- */
-let songsPieInst, newRepeatPieInst;
+/* ---------- Charts (left pie only) ---------- */
+let songsPieInst;
 function destroyChart(inst){ if(inst){ inst.destroy(); } }
 
 // Left pie: Plays by Song
@@ -531,61 +481,21 @@ function drawSongsPie(entries){
   });
 }
 
-// Right pie: New vs Repeat (last 12 weeks)
-function drawNewRepeatPie(newCount, repeatCount){
-  const ctx = $("#barChart"); // reuse existing canvas slot
-  destroyChart(newRepeatPieInst);
-
-  const labels = ["New songs introduced (12w)","In rotation (12w)"];
-  const data = [newCount, repeatCount];
-  const total = Math.max(1, data.reduce((a,b)=>a+(+b||0), 0)); // avoid divide-by-zero
-
-  newRepeatPieInst = new Chart(ctx, {
-    type: "pie",
-    data: { labels, datasets:[{ data }] },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            generateLabels(chart){
-              const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-              const ds   = chart.data.datasets[0]?.data || [];
-              const lbs  = chart.data.labels || [];
-              const sum  = ds.reduce((a,b)=>a+(+b||0),0) || 1;
-              return base.map((item, i) => {
-                const val = +ds[i] || 0;
-                const pct = Math.round((val/sum)*1000)/10;
-                return { ...item, text: `${safeLabel(lbs[i])} — ${pct}%` };
-              });
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            label(ctx){
-              const val = +ctx.parsed || 0;
-              const pct = Math.round((val/total)*1000)/10;
-              return `${safeLabel(ctx.label)}: ${val} (${pct}%)`;
-            }
-          }
-        }
-      }
-    }
-  });
+/* ---------- Hide right-hand analytics (chart + list) ---------- */
+function hideRightChart(){
+  const rightCanvas = $("#barChart");
+  const rightCard = rightCanvas ? rightCanvas.closest(".chart-card") : null;
+  if(rightCard) rightCard.style.display = "none";
 }
-
-// Adjust the title above the right-hand chart card
-function updateSecondChartTitle(text){
-  const card = $("#barChart")?.closest(".chart-card");
-  const h3 = card?.querySelector("h3");
-  if(h3) h3.textContent = text;
+function hideRightList(){
+  const rightList = $("#bottom5");
+  const rightListWrap = rightList ? rightList.closest("div") : null; // the <div> that holds header + list
+  if(rightListWrap) rightListWrap.style.display = "none";
 }
 
 /* ---------- BOOT ---------- */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  loadPractice(); // render computed Thursday/Sunday table
+  loadPractice();
   try{ await loadMembers(); }catch{}
   try{ await loadSpecialPractice(); }catch{}
   try{ await loadAnnouncements(); }catch{}
