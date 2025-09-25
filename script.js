@@ -51,7 +51,6 @@ const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct"
 function fmtDateOnly(dt) {
   return `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
 }
-function fmtRangeFromText(s) { return String(s || "").trim(); }
 function withinLastNDays(dt, n = 31) {
   const today = new Date(); const start = new Date(); start.setDate(today.getDate() - n);
   return dt >= start && dt <= today;
@@ -66,23 +65,16 @@ function nextWeeklyOccurrence(targetWeekday, startH, startM, endH, endM) {
   occ.setHours(startH, startM, 0, 0);
   const end = new Date(occ); end.setHours(endH, endM, 0, 0);
   if (now > end) occ.setDate(occ.getDate() + 7);
-  return { date: occ, range: `${toHM(startH,startM)} to ${toHM(endH,endM)}` };
-}
-function toHM(h,m){
-  const d=new Date(); d.setHours(h,m,0,0);
-  return d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}).toLowerCase();
+  const toHM = (h,m)=> new Date(0,0,0,h,m).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}).toLowerCase();
+  return `${fmtDateOnly(occ)} ${toHM(startH,startM)} to ${toHM(endH,endM)}`;
 }
 function renderWeeklyPractices() {
   const ul = document.getElementById("weekly-practice-list");
   if (!ul) return;
-  const thurs = nextWeeklyOccurrence(4, 18, 0, 20, 0); // Thurs 6–8pm
-  const sun   = nextWeeklyOccurrence(0, 8, 40, 9, 30); // Sun 8:40–9:30am
   ul.innerHTML = "";
-  [thurs, sun].forEach(({date, range}) => {
-    const li = document.createElement("li");
-    li.textContent = `${fmtDateOnly(date)} ${range}`;
-    ul.appendChild(li);
-  });
+  [nextWeeklyOccurrence(4, 18, 0, 20, 0),  // Thurs 6–8pm
+   nextWeeklyOccurrence(0, 8, 40, 9, 30)]  // Sun 8:40–9:30am
+   .forEach(t => { const li=document.createElement("li"); li.textContent=t; ul.appendChild(li); });
 }
 
 /***** ADDITIONAL PRACTICE (non-Thu/Sun; reads "ADDITIONAL PRACTICE") *****/
@@ -94,23 +86,25 @@ async function renderAdditionalPractice() {
     const normalized = rows.map((r) => {
       const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
       const date = excelToDate(o.date ?? o["practice date"] ?? o.day ?? "");
-      // <-- this line picks up your column B label
-      const time = String(o["additional practice"] ?? o.time ?? o["practice time"] ?? "").trim();
-      const notes = String(o.notes ?? o.note ?? "").trim();
-      return { date, time, notes };
+      // robust: accept multiple header variants for the time column
+      const time = String(
+        o["additional practice"] ?? o["additionalpractice"] ??
+        o["time"] ?? o["practice time"] ?? o["notes"] ?? ""
+      ).trim();
+      return { date, time };
     }).filter(x => x.date && ![0,4].includes(x.date.getDay())) // exclude Sun(0), Thu(4)
       .sort((a,b) => a.date - b.date);
 
     tbody.innerHTML = "";
-    if (!normalized.length) { tbody.innerHTML = `<tr><td colspan="3">No additional practices listed.</td></tr>`; return; }
-    normalized.forEach(({date,time,notes}) => {
+    if (!normalized.length) { tbody.innerHTML = `<tr><td colspan="2">No additional practices listed.</td></tr>`; return; }
+    normalized.forEach(({date,time}) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${fmtRangeFromText(time) || "-"}</td><td>${notes || ""}</td>`;
+      tr.innerHTML = `<td>${fmtDateOnly(date)}</td><td>${time || "-"}</td>`;
       tbody.appendChild(tr);
     });
   } catch (e) {
     console.error("Additional Practice error:", e);
-    tbody.innerHTML = `<tr><td colspan="3">Unable to load Additional Practice.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="2">Unable to load Additional Practice.</td></tr>`;
   }
 }
 
@@ -147,8 +141,7 @@ async function renderAnnouncements() {
   try {
     const rows = await fetchXlsxRows(SRC.announcements);
     const data = rows.map((r) => {
-      const o = {}; Object.keys(r).forEach(k => o[k].toString); // noop to avoid IDE noise
-      Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
+      const o = {}; Object.keys(r).forEach(k => o[k.trim().toLowerCase()] = r[k]);
       const date = excelToDate(o.date ?? o["announcement date"] ?? "");
       const english = String(o.announcement ?? o.english ?? o.message ?? "").trim();
       const hmong   = String(o["lus tshaj tawm"] ?? o.hmong ?? "").trim();
@@ -231,36 +224,26 @@ function loadGoogle() {
   return new Promise((resolve) => { google.charts.load("current", { packages: ["corechart"] }); google.charts.setOnLoadCallback(resolve); });
 }
 
-// Top 10 (3D pie) — robust parsing
+// Top 10 (3D pie)
 async function renderTop10Pie() {
   const el = document.getElementById("chart-top10");
   if (!el) return;
   try {
     await loadGoogle();
     const rows = await fetchCsv(SRC.kpiTop10);
-
-    // Try to detect label & value columns
     const headers = rows.length ? Object.keys(rows[0]) : [];
-    let nameKey = headers.find(h => /song|title/i.test(h));
-    let valKey  = headers.find(h => /play|count|times|value|freq|uses/i.test(h));
-
-    // Fallback: first two columns
-    if (!nameKey || !valKey) {
-      nameKey = headers[0];
-      valKey  = headers[1];
-    }
+    let nameKey = headers.find(h => /song|title/i.test(h)) || headers[0];
+    let valKey  = headers.find(h => /play|count|times|value|freq|uses/i.test(h)) || headers[1];
 
     const dataArr = [["Song", "Plays"]];
     rows.forEach(r => {
       const name = String(r?.[nameKey] ?? "").trim();
-      let valRaw = (r?.[valKey] ?? "0").toString().trim();
-      valRaw = valRaw.replace(/,/g,""); // remove thousands separators
+      let valRaw = (r?.[valKey] ?? "0").toString().trim().replace(/,/g,"");
       const val = Number(valRaw);
       if (name && isFinite(val)) dataArr.push([name, val]);
     });
 
     if (dataArr.length <= 1) { el.innerHTML = "Unable to render Top 10."; return; }
-
     const data = google.visualization.arrayToDataTable(dataArr);
     const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
     const chart = new google.visualization.PieChart(el);
@@ -271,7 +254,7 @@ async function renderTop10Pie() {
   }
 }
 
-// Played vs Not Played — ONLY from songs_catalog.csv
+// Played vs Not Played — from songs_catalog.csv only
 async function renderPlayedRatio() {
   const kpiVal = document.getElementById("kpi-played-ratio");
   const kpiSub = document.getElementById("kpi-played-sub");
@@ -280,33 +263,33 @@ async function renderPlayedRatio() {
 
   try {
     await loadGoogle();
-    const catalogRows = await fetchCsv(SRC.catalog);
+    const rows = await fetchCsv(SRC.catalog);
 
-    // Detect title/name column (the one that is blank if not yet played)
-    const headers = catalogRows.length ? Object.keys(catalogRows[0]) : [];
-    const titleKey =
-      headers.find(h => /song|title|name/i.test(h)) ||
-      headers.find(h => h.toLowerCase() !== "number") || // if only "number" and a blank column
-      headers[0];
+    // Identify ID-like columns to ignore when deciding "played"
+    const idLike = new Set(["number", "no", "index", "#"]);
 
-    let playedCount = 0;
-    let totalCount = 0;
-    catalogRows.forEach(r => {
-      const title = String(r?.[titleKey] ?? "").trim();
-      // Count every row as a song in catalog
-      totalCount += 1;
-      if (title) playedCount += 1; // name present => played
+    let played = 0, total = 0;
+    rows.forEach(row => {
+      total += 1;
+      // "Played" if any non-ID column has a non-blank value
+      const hasName = Object.entries(row).some(([k,v]) => {
+        const key = String(k).trim().toLowerCase();
+        if (idLike.has(key)) return false;
+        const val = String(v ?? "").trim();
+        return val.length > 0;
+      });
+      if (hasName) played += 1;
     });
 
-    const notPlayed = Math.max(totalCount - playedCount, 0);
-    const pct = totalCount ? Math.round((playedCount / totalCount) * 100) : 0;
+    const notPlayed = Math.max(total - played, 0);
+    const pct = total ? Math.round((played / total) * 100) : 0;
 
     kpiVal.textContent = `${pct}%`;
-    kpiSub.textContent = `Played ${playedCount} of ${totalCount}`;
+    kpiSub.textContent = `Played ${played} of ${total}`;
 
     const data = google.visualization.arrayToDataTable([
       ["Type","Count"],
-      ["Played", playedCount],
+      ["Played", played],
       ["Not Played", notPlayed],
     ]);
     const options = { is3D: true, backgroundColor: "transparent", legend: { textStyle: { color: "#e5e7eb" } }, chartArea: { width: "90%", height: "80%" } };
