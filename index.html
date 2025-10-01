@@ -13,7 +13,7 @@
   <script src="https://www.gstatic.com/charts/loader.js"></script>
 
   <!-- App -->
-  <script src="script.js?v=2025-09-27f" defer></script>
+  <script src="script.js?v=2025-10-01" defer></script>
 </head>
 <body>
   <main class="container">
@@ -27,7 +27,7 @@
     <!-- Top grid: left (practice), right (members + training) -->
     <div class="grid-2">
       <div class="col">
-        <!-- Weekly Practices (now a Date/Time table) -->
+        <!-- Weekly Practices -->
         <section class="card">
           <h2>Weekly Practices</h2>
           <div class="table-wrap">
@@ -56,23 +56,20 @@
       </div>
 
       <div class="col">
-        <!-- Members (three-category layout) -->
+        <!-- Members -->
         <section class="card">
           <h2>Worship Team Members</h2>
-
           <div class="members-grid">
             <div class="members-left">
               <div class="members-block">
                 <h3>Worship Leader</h3>
                 <ul id="leader-list" class="plain-list"></ul>
               </div>
-
               <div class="members-block">
                 <h3>Musician</h3>
                 <ul id="musician-list" class="plain-list"></ul>
               </div>
             </div>
-
             <div class="members-right">
               <div class="members-block">
                 <h3>Singers</h3>
@@ -111,7 +108,7 @@
       <p class="muted">Newest first; items auto-hide after 31 days from the sheet date.</p>
     </section>
 
-    <!-- Bible Study Log (last 4 weeks) -->
+    <!-- Bible Study Log -->
     <section class="card">
       <h2>Bible Study Log</h2>
       <div class="table-wrap">
@@ -122,10 +119,10 @@
           <tbody id="bible-study-body"></tbody>
         </table>
       </div>
-      <p class="muted">Shows current week and previous 3 weeks. Future sessions appear automatically when their week arrives.</p>
+      <p class="muted">Shows current week and previous 3 weeks.</p>
     </section>
 
-    <!-- Setlist (between Bible Study and Analytics) -->
+    <!-- Setlist -->
     <section class="card">
       <h2>Setlist</h2>
       <div class="grid-2">
@@ -148,12 +145,14 @@
           </div>
         </div>
       </div>
-      <p class="muted">Auto-rolls each Sunday at 12:30 pm.</p>
+      <p class="muted">Shows all events within a Sunday–Saturday week.</p>
     </section>
 
-    <!-- Song Analytics (last 52 weeks) -->
+    <!-- Song Analytics -->
     <section class="card">
       <h2>Song Analytics</h2>
+
+      <!-- Last 52 Weeks -->
       <div class="charts">
         <div class="chart-card">
           <h3>Top 10 Played Songs (3D Pie) — Last 52 Weeks</h3>
@@ -165,6 +164,23 @@
             <table class="table">
               <thead><tr><th>Song</th><th>Times Played</th></tr></thead>
               <tbody id="table-top10-window"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- All Time -->
+      <div class="charts">
+        <div class="chart-card">
+          <h3>Top 10 Played Songs (3D Pie) — All Time</h3>
+          <div id="chart-top10-alltime" class="chart-area chart-area-lg"></div>
+        </div>
+        <div class="chart-card">
+          <h3>Top Songs — Plays (All Time)</h3>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Song</th><th>Times Played</th></tr></thead>
+              <tbody id="table-top10-alltime"></tbody>
             </table>
           </div>
         </div>
