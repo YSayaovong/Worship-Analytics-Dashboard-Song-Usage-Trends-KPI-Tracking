@@ -1,4 +1,4 @@
-# Worship Analytics Dashboard | Music Ministry Performance Insights
+# 🎶 Worship Analytics Dashboard | Music Ministry Performance Insights
 
 ## Executive Summary
 Church music teams need structured tools to track song usage, practice schedules, and CCLI reporting.  
@@ -12,10 +12,15 @@ Music ministries often struggle with:
 - Reporting CCLI song usage  
 - Balancing setlists  
 
-📊 Example visuals (add screenshots):  
-- Song frequency bar chart  
-- Setlist trends  
-- Practice schedule calendar  
+📊 Example visuals:  
+
+<p align="center"><img src="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/screenshots/top_10_52_wks_list.png" alt="Top 10 Songs (52 Weeks - List)" width="800"/></p>  
+
+<p align="center"><img src="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/screenshots/top_10_52_wks_pie.png" alt="Top 10 Songs (52 Weeks - Pie)" width="800"/></p>  
+
+<p align="center"><img src="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/screenshots/top_10_all_time_list.png" alt="Top 10 Songs (All Time - List)" width="800"/></p>  
+
+<p align="center"><img src="https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/screenshots/top_10_all_time_pie.png" alt="Top 10 Songs (All Time - Pie)" width="800"/></p>  
 
 ---
 
