@@ -383,11 +383,31 @@ async function renderAnnouncements(){
       const m = normMap(r);
       const d = excelToDate(val(m, ["date","day"]));
       const en = val(m, ["announcementenglish","announcement","english"]);
-      // robust hmong: try known keys; otherwise find any key containing both 'hmong' or ('lus' + 'tshaj')
-      let hm = val(m, ["hmong","lustshajtawm","lus_tshaj_tawm","lus","tshaj"]);
+
+      // --- Robust Hmong detection ---
+      // 1) direct keys
+      let hm = val(m, [
+        "hmong", "hmoob",
+        "lustshaj", "lustshajntawm","lustshajtauwm","lustshajtauwmhmong","lustshajtauwmhmoob",
+        "lus_tshaj_tawm","lus_tshaj_tawm_hmong","lus_tshaj_tawm_hmoob"
+      ]);
+
+      // 2) any header that contains 'hmong' or 'hmoob'
       if(!hm){
-        // Try by includes
-        hm = findByIncludes(m, ["hmong"]) || findByIncludes(m, ["lus","tshaj"]);
+        hm = findByIncludes(m, ["hmong"]) || findByIncludes(m, ["hmoob"]);
+      }
+      // 3) any header that contains both 'lus' and 'tshaj' (and optionally 'tawm')
+      if(!hm){
+        hm = findByIncludes(m, ["lus","tshaj"]) || findByIncludes(m, ["lus","tshaj","tawm"]);
+      }
+      // 4) fallback: try to pick a non-English column if present
+      if(!hm){
+        const keys = Object.keys(m);
+        const candidates = keys.filter(k => {
+          const nk = k.toLowerCase();
+          return !(nk.includes("english") || nk.includes("announcement")) && nk !== "date" && nk !== "day";
+        });
+        if(candidates.length){ hm = m[candidates[0]]; }
       }
       return { d, en, hm };
     }).filter(x => x.d && (today - x.d) <= thirtyOneDays)
@@ -405,7 +425,7 @@ async function renderAnnouncements(){
     console.error("Announcements error:", e);
     tbody.innerHTML = `<tr><td colspan="3">Could not load announcements sheet.</td></tr>`;
   }
-}
+}}
 
 /***** Bible Study *****/
 async function renderBibleStudy(){
