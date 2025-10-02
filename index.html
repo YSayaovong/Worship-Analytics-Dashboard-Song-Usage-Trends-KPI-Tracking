@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HFBC – Praise and Worship</title>
+  <title>HFBC – Praise & Worship Dashboard</title>
 
-  <link rel="stylesheet" href="style.css?v=2025-10-02" />
+  <link rel="stylesheet" href="style.css?v=2025-10-02g" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="https://www.gstatic.com/charts/loader.js"></script>
-  <script src="script.js?v=2025-10-02" defer></script>
+  <script src="script.js?v=2025-10-02g" defer></script>
 </head>
 <body>
   <main class="container">
     <header class="page-header">
-      <h1>HFBC – Praise and Worship</h1>
-      <p class="muted">Live updates from GitHub spreadsheets and CSVs.</p>
+      <h1>HFBC – Praise & Worship</h1>
+      <p class="muted">Live view from GitHub spreadsheets (English & Hmong supported).</p>
     </header>
 
     <div class="grid-2">
@@ -27,6 +27,7 @@
               <tbody id="weekly-practice-body"></tbody>
             </table>
           </div>
+          <p class="muted">Holds today's entries until 11:59 PM (no early rollover).</p>
         </section>
 
         <section class="card">
@@ -77,6 +78,7 @@
           <tbody id="announcements-body"></tbody>
         </table>
       </div>
+      <p class="muted">Shows the last 31 days.</p>
     </section>
 
     <section class="card">
@@ -87,6 +89,7 @@
           <tbody id="bible-study-body"></tbody>
         </table>
       </div>
+      <p class="muted">Current week + previous 3 weeks.</p>
     </section>
 
     <section class="card">
@@ -107,14 +110,14 @@
       <h2>Song Analytics</h2>
       <div class="charts">
         <div class="chart-card">
-          <h3>Top 10 Songs (52 Weeks)</h3>
-          <div id="chart-top10-played" class="chart-area"></div>
-          <table class="table"><tbody id="table-top10-window"></tbody></table>
+          <h3>Top 10 — Last 52 Weeks</h3>
+          <div id="chart-top10-played" class="chart-area chart-area-lg"></div>
+          <table class="table"><thead><tr><th>Song</th><th>Plays</th></tr></thead><tbody id="table-top10-window"></tbody></table>
         </div>
         <div class="chart-card">
-          <h3>Top 10 Songs (All Time)</h3>
-          <div id="chart-top10-alltime" class="chart-area"></div>
-          <table class="table"><tbody id="table-top10-alltime"></tbody></table>
+          <h3>Top 10 — All Time</h3>
+          <div id="chart-top10-alltime" class="chart-area chart-area-lg"></div>
+          <table class="table"><thead><tr><th>Song</th><th>Plays</th></tr></thead><tbody id="table-top10-alltime"></tbody></table>
         </div>
       </div>
     </section>
