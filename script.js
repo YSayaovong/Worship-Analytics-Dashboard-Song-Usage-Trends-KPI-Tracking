@@ -233,3 +233,189 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Init error:", e);
   }
 });
+
+/***** ---------- SAFE RENDERERS (additions) ---------- *****/
+/* Helpers */
+function el(id){ return document.getElementById(id); }
+function normMap(row){
+  const m = {}; Object.keys(row||{}).forEach(k => m[norm(k)] = row[k]); return m;
+}
+function val(m, keys){
+  for(const k of keys){ const v = m[k]; if(v!=null && String(v)!=="") return v; }
+  return "";
+}
+
+/***** Weekly Practices (compute upcoming Thu/Sun if no sheet is provided) *****/
+async function renderWeeklyPractices(){
+  const tbody = el("weekly-practice-body");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  // Compute next Thursday and Sunday based on today
+  const today = new Date();
+  function nextDow(target){ // 0=Sun ... 6=Sat
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const delta = (target - d.getDay() + 7) % 7 || 7;
+    d.setDate(d.getDate() + delta);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  const thurs = nextDow(4);
+  const sun = nextDow(0);
+  const fmt = (dt) => `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
+  // If you later add a dedicated weekly_practice.xlsx, you can fetchXlsxRows() here and override times.
+  const rows = [
+    { date: thurs, time: "7:00 PM" },
+    { date: sun,   time: "12:30 PM" },
+  ];
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmt(r.date)}</td><td>${r.time}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/***** Additional Practice *****/
+async function renderAdditionalPractice(){
+  const tbody = el("additional-practice-body");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  try{
+    const rows = await fetchXlsxRows(SRC.addPractice);
+    rows.forEach(r => {
+      const m = normMap(r);
+      const d = excelToDate(val(m, ["date","day","servicedate"]));
+      const t = val(m, ["time","starttime","practice"]);
+      if(!d || !t) return;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDateOnly(d)}</td><td>${t}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(!tbody.children.length){
+      tbody.innerHTML = `<tr><td colspan="2">No additional practices listed.</td></tr>`;
+    }
+  }catch(e){
+    console.error("Additional practice error:", e);
+    tbody.innerHTML = `<tr><td colspan="2">Could not load special practice sheet.</td></tr>`;
+  }
+}
+
+/***** Training *****/
+async function renderTraining(){
+  const tbody = el("training-body");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  try{
+    const rows = await fetchXlsxRows(SRC.training);
+    rows.forEach(r => {
+      const m = normMap(r);
+      const d = excelToDate(val(m, ["date","day"]));
+      const t = val(m, ["time","starttime"]);
+      const passage = val(m, ["passage","topic","study"]);
+      const verse = val(m, ["bibleverse","verse","reference"]);
+      if(!d || (!t && !passage && !verse)) return;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDateOnly(d)}</td><td>${t||""}</td><td>${passage||""}</td><td>${verse||""}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(!tbody.children.length){
+      tbody.innerHTML = `<tr><td colspan="4">No training entries found.</td></tr>`;
+    }
+  }catch(e){
+    console.error("Training error:", e);
+    tbody.innerHTML = `<tr><td colspan="4">Could not load training sheet.</td></tr>`;
+  }
+}
+
+/***** Members *****/
+async function renderMembers(){
+  const leaderList = el("leader-list");
+  const musicianList = el("musician-list");
+  const singersList = el("singers-list");
+  if(!leaderList || !musicianList || !singersList) return;
+  leaderList.innerHTML = musicianList.innerHTML = singersList.innerHTML = "";
+  try{
+    const rows = await fetchXlsxRows(SRC.members);
+    const leaders = [], musicians = [], singers = [];
+    rows.forEach(r => {
+      const m = normMap(r);
+      const name = val(m, ["name","member","person"]) || "";
+      const role = (val(m, ["role","position","type"]) || "").toLowerCase();
+      if(!name) return;
+      if(role.includes("leader")) leaders.push(name);
+      else if(role.includes("singer") || role.includes("vocal")) singers.push(name);
+      else musicians.push(name);
+    });
+    const addAll = (ul, arr) => {
+      if(!arr.length){ ul.innerHTML = "<li class='muted'>None listed</li>"; return; }
+      arr.forEach(n => { const li = document.createElement("li"); li.textContent = n; ul.appendChild(li); });
+    };
+    addAll(leaderList, leaders);
+    addAll(musicianList, musicians);
+    addAll(singersList, singers);
+  }catch(e){
+    console.error("Members error:", e);
+    leaderList.innerHTML = musicianList.innerHTML = singersList.innerHTML = "<li class='muted'>Could not load members sheet.</li>";
+  }
+}
+
+/***** Announcements *****/
+async function renderAnnouncements(){
+  const tbody = el("announcements-body");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  try{
+    const rows = await fetchXlsxRows(SRC.announcements);
+    const today = new Date();
+    const thirtyOneDays = 31 * 24 * 60 * 60 * 1000;
+    const items = rows.map(r => {
+      const m = normMap(r);
+      const d = excelToDate(val(m, ["date","day"]));
+      const en = val(m, ["announcementenglish","announcement","english"]);
+      const hm = val(m, ["hmong","lus","tshaj","lus tshaj tawm","lus_tshaj_tawm"]);
+      return { d, en, hm };
+    }).filter(x => x.d && (today - x.d) <= thirtyOneDays)
+      .sort((a,b) => b.d - a.d);
+    items.forEach(it => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDateOnly(it.d)}</td><td>${it.en||""}</td><td>${it.hm||""}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(!tbody.children.length){
+      tbody.innerHTML = `<tr><td colspan="3">No announcements from the last 31 days.</td></tr>`;
+    }
+  }catch(e){
+    console.error("Announcements error:", e);
+    tbody.innerHTML = `<tr><td colspan="3">Could not load announcements sheet.</td></tr>`;
+  }
+}
+
+/***** Bible Study *****/
+async function renderBibleStudy(){
+  const tbody = el("bible-study-body");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  try{
+    const rows = await fetchXlsxRows(SRC.bibleStudy);
+    const { start, end } = getWeekRange(new Date());
+    const prev3 = new Date(start); prev3.setDate(prev3.getDate() - 21);
+    const items = rows.map(r => {
+      const m = normMap(r);
+      const d = excelToDate(val(m, ["date","day"]));
+      const topic = val(m, ["topic","passage","study"]);
+      const verse = val(m, ["bibleverse","verse","reference"]);
+      return { d, topic, verse };
+    }).filter(x => x.d && x.d >= prev3 && x.d <= end)
+      .sort((a,b) => b.d - a.d);
+    items.forEach(it => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDateOnly(it.d)}</td><td>${it.topic||""}</td><td>${it.verse||""}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(!tbody.children.length){
+      tbody.innerHTML = `<tr><td colspan="3">No bible study entries for the last 3 weeks.</td></tr>`;
+    }
+  }catch(e){
+    console.error("Bible study error:", e);
+    tbody.innerHTML = `<tr><td colspan="3">Could not load bible study sheet.</td></tr>`;
+  }
+}
