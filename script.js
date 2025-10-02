@@ -1,6 +1,8 @@
  /***** CONFIG: GitHub sources *****/
 const SRC = {
+  // Updated announcements location (new repo)
   announcements: "https://github.com/YSayaovong/Worship-Analytics-Dashboard-Song-Usage-Trends-KPI-Tracking/blob/main/announcements/announcements.xlsx",
+  // Existing sources (unchanged)
   members:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/members/members.xlsx",
   setlist:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/setlist.xlsx",
   catalog:      "https://github.com/YSayaovong/HFBC_Praise_Worship/blob/main/setlist/songs_catalog.csv",
@@ -53,9 +55,28 @@ function getWeekRange(date) {
   return { start, end };
 }
 
-/***** (other existing functions stay same)… *****/
+/***** Helpers for robust column picking *****/
+function normMap(row){
+  const m = {}; Object.keys(row||{}).forEach(k => m[norm(k)] = row[k]); return m;
+}
+function val(m, keys){
+  for(const k of keys){ const v = m[k]; if(v!=null && String(v)!=="") return v; }
+  return "";
+}
+function findByIncludes(m, substrings){
+  const keys = Object.keys(m);
+  for(const key of keys){
+    const k = key.toLowerCase();
+    let ok = true;
+    for(const sub of substrings){
+      if(!k.includes(sub)) { ok = false; break; }
+    }
+    if(ok) return m[key];
+  }
+  return "";
+}
 
-/***** SETLIST (fixed to include all events in the week) *****/
+/***** SETLIST (includes all events in the week) *****/
 function normSetlistRow(r) {
   const m = {}; Object.keys(r).forEach(k => m[norm(k)] = r[k]);
   const date = excelToDate(m.date ?? m.day ?? m.servicedate);
@@ -234,27 +255,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-/***** ---------- SAFE RENDERERS (additions) ---------- *****/
-/* Helpers */
-function el(id){ return document.getElementById(id); }
-function normMap(row){
-  const m = {}; Object.keys(row||{}).forEach(k => m[norm(k)] = row[k]); return m;
-}
-function val(m, keys){
-  for(const k of keys){ const v = m[k]; if(v!=null && String(v)!=="") return v; }
-  return "";
-}
+/***** ---------- SAFE RENDERERS ---------- *****/
 
-/***** Weekly Practices (compute upcoming Thu/Sun if no sheet is provided) *****/
+/***** Weekly Practices (show same-day until 11:59 PM, no premature rollover) *****/
 async function renderWeeklyPractices(){
-  const tbody = el("weekly-practice-body");
+  const tbody = document.getElementById("weekly-practice-body");
   if(!tbody) return;
   tbody.innerHTML = "";
-  // Compute next Thursday and Sunday based on today
-  const today = new Date();
+  const now = new Date();
+  // Return the next occurrence of target DOW, allowing same-day (delta can be 0)
   function nextDow(target){ // 0=Sun ... 6=Sat
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const delta = (target - d.getDay() + 7) % 7 || 7;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const delta = (target - d.getDay() + 7) % 7; // <-- no "|| 7" so same-day stays
     d.setDate(d.getDate() + delta);
     d.setHours(0,0,0,0);
     return d;
@@ -262,7 +274,6 @@ async function renderWeeklyPractices(){
   const thurs = nextDow(4);
   const sun = nextDow(0);
   const fmt = (dt) => `${DAY_ABBR[dt.getDay()]}, ${MONTH_ABBR[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
-  // If you later add a dedicated weekly_practice.xlsx, you can fetchXlsxRows() here and override times.
   const rows = [
     { date: thurs, time: "7:00 PM" },
     { date: sun,   time: "12:30 PM" },
@@ -276,7 +287,7 @@ async function renderWeeklyPractices(){
 
 /***** Additional Practice *****/
 async function renderAdditionalPractice(){
-  const tbody = el("additional-practice-body");
+  const tbody = document.getElementById("additional-practice-body");
   if(!tbody) return;
   tbody.innerHTML = "";
   try{
@@ -299,9 +310,9 @@ async function renderAdditionalPractice(){
   }
 }
 
-/***** Training *****/
+/***** Training (already positioned after Members in HTML) *****/
 async function renderTraining(){
-  const tbody = el("training-body");
+  const tbody = document.getElementById("training-body");
   if(!tbody) return;
   tbody.innerHTML = "";
   try{
@@ -328,9 +339,9 @@ async function renderTraining(){
 
 /***** Members *****/
 async function renderMembers(){
-  const leaderList = el("leader-list");
-  const musicianList = el("musician-list");
-  const singersList = el("singers-list");
+  const leaderList = document.getElementById("leader-list");
+  const musicianList = document.getElementById("musician-list");
+  const singersList = document.getElementById("singers-list");
   if(!leaderList || !musicianList || !singersList) return;
   leaderList.innerHTML = musicianList.innerHTML = singersList.innerHTML = "";
   try{
@@ -358,23 +369,30 @@ async function renderMembers(){
   }
 }
 
-/***** Announcements *****/
+/***** Announcements (improved Hmong detection) *****/
 async function renderAnnouncements(){
-  const tbody = el("announcements-body");
+  const tbody = document.getElementById("announcements-body");
   if(!tbody) return;
   tbody.innerHTML = "";
   try{
     const rows = await fetchXlsxRows(SRC.announcements);
     const today = new Date();
     const thirtyOneDays = 31 * 24 * 60 * 60 * 1000;
+
     const items = rows.map(r => {
       const m = normMap(r);
       const d = excelToDate(val(m, ["date","day"]));
       const en = val(m, ["announcementenglish","announcement","english"]);
-      const hm = val(m, ["hmong","lus","tshaj","lus tshaj tawm","lus_tshaj_tawm"]);
+      // robust hmong: try known keys; otherwise find any key containing both 'hmong' or ('lus' + 'tshaj')
+      let hm = val(m, ["hmong","lustshajtawm","lus_tshaj_tawm","lus","tshaj"]);
+      if(!hm){
+        // Try by includes
+        hm = findByIncludes(m, ["hmong"]) || findByIncludes(m, ["lus","tshaj"]);
+      }
       return { d, en, hm };
     }).filter(x => x.d && (today - x.d) <= thirtyOneDays)
       .sort((a,b) => b.d - a.d);
+
     items.forEach(it => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${fmtDateOnly(it.d)}</td><td>${it.en||""}</td><td>${it.hm||""}</td>`;
@@ -391,7 +409,7 @@ async function renderAnnouncements(){
 
 /***** Bible Study *****/
 async function renderBibleStudy(){
-  const tbody = el("bible-study-body");
+  const tbody = document.getElementById("bible-study-body");
   if(!tbody) return;
   tbody.innerHTML = "";
   try{
